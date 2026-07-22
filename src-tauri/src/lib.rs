@@ -17,6 +17,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ping,
             commands::add_to_playlist,
+            commands::list_playlist,
             commands::play_index,
             commands::play,
             commands::next,

@@ -8,10 +8,22 @@ export interface Track {
   duration_secs: number;
 }
 
+export interface PlaylistSnapshot {
+  tracks: Track[];
+  current: number | null;
+}
+
+export const AUDIO_EXTS = ['wav', 'mp3', 'flac', 'ogg', 'oga', 'm4a', 'aac'];
+
+export const isAudio = (path: string) =>
+  AUDIO_EXTS.includes(path.split('.').pop()?.toLowerCase() ?? '');
+
 export const ping = () => invoke<string>('ping');
 
 export const addToPlaylist = (paths: string[]) =>
   invoke<Track[]>('add_to_playlist', { paths });
+
+export const listPlaylist = () => invoke<PlaylistSnapshot>('list_playlist');
 
 export const playIndex = (i: number) => invoke<void>('play_index', { i });
 export const play = () => invoke<void>('play');

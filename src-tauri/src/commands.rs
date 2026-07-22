@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 
+use serde::Serialize;
 use tauri::{AppHandle, State};
 
 use lofty::config::ParseOptions;
@@ -72,6 +73,22 @@ pub fn add_to_playlist(
     Ok(p.tracks.clone())
 }
 
+/// Snapshot used to restore UI state after a webview reload (right-click refresh).
+#[derive(Serialize)]
+pub struct PlaylistSnapshot {
+    pub tracks: Vec<Track>,
+    pub current: Option<usize>,
+}
+
+#[tauri::command]
+pub fn list_playlist(playlist: State<'_, Mutex<Playlist>>) -> Result<PlaylistSnapshot, String> {
+    let p = playlist.lock().map_err(|e| e.to_string())?;
+    Ok(PlaylistSnapshot {
+        tracks: p.tracks.clone(),
+        current: p.current,
+    })
+}
+
 #[tauri::command]
 pub fn play_index(
     i: usize,
@@ -98,7 +115,11 @@ pub fn next(
         let mut p = playlist.lock().map_err(|e| e.to_string())?;
         let cur = p.current;
         let nxt = p.next_index(cur);
-        p.current = nxt;
+        // Keep current at the last valid index even at the end of the list,
+        // so Prev still works after Next hits the end.
+        if let Some(i) = nxt {
+            p.current = Some(i);
+        }
         match nxt {
             Some(i) => p.tracks.get(i).cloned(),
             None => None,

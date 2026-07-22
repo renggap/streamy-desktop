@@ -1,33 +1,55 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
+  import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { listen } from '@tauri-apps/api/event';
   import { nowPlaying, currentIndex, playing, errorMsg, playlist } from './lib/stores';
-  import { next } from './lib/api';
+  import { next, listPlaylist, addToPlaylist, isAudio } from './lib/api';
   import Playlist from './lib/components/Playlist.svelte';
   import Transport from './lib/components/Transport.svelte';
   import NowPlaying from './lib/components/NowPlaying.svelte';
   import type { Track } from './lib/api';
 
   onMount(() => {
+    // Restore playlist state (survives a webview reload / right-click refresh).
+    listPlaylist().then((snap) => {
+      playlist.set(snap.tracks);
+      if (snap.current != null && snap.tracks[snap.current]) {
+        currentIndex.set(snap.current);
+        nowPlaying.set(snap.tracks[snap.current]);
+        playing.set(true);
+      }
+    });
+
     const np = listen<Track>('now_playing', (e) => {
       nowPlaying.set(e.payload);
       playing.set(true);
-      // Sync the row highlight to whatever is now playing (covers next/prev/auto-advance).
       const idx = get(playlist).findIndex((t) => t.path === e.payload.path);
       currentIndex.set(idx >= 0 ? idx : null);
     });
     const ended = listen('track_ended', () => {
       playing.set(false);
-      next(); // auto-advance; if at end, next() is a no-op
+      next();
     });
     const err = listen<string>('error', (e) => {
       errorMsg.set(e.payload);
     });
+
+    // OS-level file drag-and-drop (gives real absolute paths; HTML5 DnD can't).
+    const dd = getCurrentWebview().onDragDropEvent((e) => {
+      if (e.payload.type === 'drop') {
+        const paths = e.payload.paths.filter(isAudio);
+        if (paths.length) {
+          addToPlaylist(paths).then((tracks) => playlist.set(tracks));
+        }
+      }
+    });
+
     return () => {
       np.then((u) => u());
       ended.then((u) => u());
       err.then((u) => u());
+      dd.then((u) => u());
     };
   });
 </script>
