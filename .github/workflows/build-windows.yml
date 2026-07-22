@@ -1,0 +1,45 @@
+name: build-windows
+
+# Builds the Streamy Desktop Tauri app for Windows on every push (any branch),
+# on version tags, and on manual dispatch. Uploads the .msi / NSIS installer
+# and the raw .exe as a workflow artifact you can download and run on a
+# Windows box without building locally.
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build Tauri app (.msi + .exe)
+        run: npm run tauri build
+
+      - name: Upload installers + exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: streamy-desktop-windows
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/**
+            src-tauri/target/release/*.exe
