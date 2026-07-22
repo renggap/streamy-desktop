@@ -31,7 +31,7 @@ fn sample(name: &str) -> ConnectionProfile {
 #[test]
 fn crud_roundtrip_plaintext_fallback() {
     let (s, dir) = tmp_store("crud");
-    s.save(sample("live"), "secret".into()).unwrap();
+    s.save(sample("live"), Some("secret".to_string())).unwrap();
 
     let list = s.list();
     assert_eq!(list.len(), 1);
@@ -49,14 +49,26 @@ fn crud_roundtrip_plaintext_fallback() {
 fn save_replaces_existing_by_name() {
     let (s, dir) = tmp_store("replace");
     let mut p = sample("p");
-    s.save(p.clone(), "pw1".to_string()).unwrap();
+    s.save(p.clone(), Some("pw1".to_string())).unwrap();
     p.host = "b".into();
-    s.save(p, "pw2".to_string()).unwrap();
+    s.save(p, Some("pw2".to_string())).unwrap();
 
     let list = s.list();
     assert_eq!(list.len(), 1, "replace must not duplicate");
     assert_eq!(list[0].host, "b");
     assert_eq!(s.get_password("p").unwrap(), "pw2");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn save_none_keeps_existing_password() {
+    let (s, dir) = tmp_store("keep");
+    let mut p = sample("k");
+    s.save(p.clone(), Some("orig".to_string())).unwrap();
+    // Edit fields, pass None for password -> existing password retained.
+    p.host = "newhost".into();
+    s.save(p, None).unwrap();
+    assert_eq!(s.get_password("k").unwrap(), "orig");
     fs::remove_dir_all(&dir).ok();
 }
 

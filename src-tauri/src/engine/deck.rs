@@ -19,6 +19,7 @@ pub struct Deck {
     file_rate: u32,
     pcm: Vec<f32>,
     read_pos: f64,
+    seek_offset_secs: f64,
     step: f64,
     total_secs: f64,
     path: Option<String>,
@@ -36,6 +37,7 @@ impl Deck {
             file_rate: 44100,
             pcm: Vec::new(),
             read_pos: 0.0,
+            seek_offset_secs: 0.0,
             step: 1.0,
             total_secs: 0.0,
             path: None,
@@ -66,7 +68,7 @@ impl Deck {
         if self.file_rate == 0 || self.total_secs <= 0.0 {
             return None;
         }
-        let elapsed = self.read_pos / self.file_rate as f64;
+        let elapsed = self.seek_offset_secs + self.read_pos / self.file_rate as f64;
         Some((elapsed / self.total_secs, elapsed, self.total_secs))
     }
 
@@ -87,6 +89,7 @@ impl Deck {
         self.path = Some(path.to_string());
         self.pcm.clear();
         self.read_pos = 0.0;
+        self.seek_offset_secs = 0.0;
         self.ended = false;
         self.just_ended = false;
         Ok(())
@@ -101,8 +104,8 @@ impl Deck {
         if self.open(&path, device_rate).is_err() {
             return;
         }
+        let target = self.total_secs * pct.clamp(0.0, 1.0);
         if let Some(format) = self.format.as_mut() {
-            let target = self.total_secs * pct.clamp(0.0, 1.0);
             let to = SeekTo::Time {
                 time: Time::new(target.floor() as u64, target.fract()),
                 track_id: None,
@@ -115,12 +118,15 @@ impl Deck {
                     track_id: None,
                 };
                 if let Err(e2) = format.seek(SeekMode::Coarse, to2) {
-                    crate::diag::log(format!("seek failed: {e} / coarse: {e2}"));
+                    crate::diag::log(format!("seek to {target:.1}s failed: {e} / coarse: {e2}"));
                 }
             }
         }
         self.pcm.clear();
         self.read_pos = 0.0;
+        // Position display reflects the seek target (otherwise the bar snaps
+        // back to 0 until the deck decodes past it).
+        self.seek_offset_secs = target;
         self.ended = false;
     }
 

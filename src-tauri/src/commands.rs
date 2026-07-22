@@ -225,7 +225,7 @@ pub fn list_profiles(store: State<'_, ProfileStore>) -> Vec<ConnectionProfile> {
 #[tauri::command]
 pub fn save_profile(
     profile: ConnectionProfile,
-    password: String,
+    password: Option<String>,
     store: State<'_, ProfileStore>,
 ) -> Result<(), String> {
     store.save(profile, password)

@@ -67,7 +67,7 @@ export interface ConnectionProfile {
 export const BITRATES = [16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
 
 export const listProfiles = () => invoke<ConnectionProfile[]>('list_profiles');
-export const saveProfile = (profile: ConnectionProfile, password: string) =>
+export const saveProfile = (profile: ConnectionProfile, password: string | null) =>
   invoke<void>('save_profile', { profile, password });
 export const deleteProfile = (name: string) =>
   invoke<void>('delete_profile', { name });

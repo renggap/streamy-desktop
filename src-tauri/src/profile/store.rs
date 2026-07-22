@@ -29,8 +29,10 @@ pub struct ConnectionProfile {
     pub plaintext_pw: Option<String>,
 }
 
-/// JSON-backed profile store. Passwords go to the OS keyring when available;
-/// otherwise they fall back to plaintext in the JSON (surfaced to the UI).
+/// JSON-backed profile store. Passwords are stored as plaintext in the JSON
+/// (in the OS app-data dir, user-private). The OS keyring path was unreliable
+/// across save/get on Windows (set succeeded, get failed), so plaintext is the
+/// default; keyring code is retained but gated off.
 pub struct ProfileStore {
     dir: PathBuf,
     use_keyring: bool,
@@ -40,7 +42,7 @@ impl ProfileStore {
     pub fn new(dir: PathBuf) -> Self {
         Self {
             dir,
-            use_keyring: true,
+            use_keyring: false,
         }
     }
 
@@ -80,12 +82,27 @@ impl ProfileStore {
             .collect()
     }
 
-    pub fn save(&self, mut profile: ConnectionProfile, password: String) -> Result<(), String> {
-        let stored_in_keyring = self.use_keyring
-            && keyring::Entry::new(KEYRING_SERVICE, &profile.name)
-                .and_then(|e| e.set_password(&password))
-                .is_ok();
-        profile.plaintext_pw = if stored_in_keyring { None } else { Some(password) };
+    /// Save (or replace) a profile. `password`: `Some(pw)` sets it; `None` keeps
+    /// the existing stored password (used when editing non-credential fields).
+    pub fn save(&self, mut profile: ConnectionProfile, password: Option<String>) -> Result<(), String> {
+        match password {
+            Some(pw) => {
+                let stored_in_keyring = self.use_keyring
+                    && keyring::Entry::new(KEYRING_SERVICE, &profile.name)
+                        .and_then(|e| e.set_password(&pw))
+                        .is_ok();
+                profile.plaintext_pw = if stored_in_keyring { None } else { Some(pw) };
+            }
+            None => {
+                // Keep whatever password is already stored.
+                let existing = self
+                    .read_all()
+                    .iter()
+                    .find(|p| p.name == profile.name)
+                    .and_then(|p| p.plaintext_pw.clone());
+                profile.plaintext_pw = existing;
+            }
+        }
 
         let mut all = self.read_all();
         if let Some(existing) = all.iter_mut().find(|p| p.name == profile.name) {
