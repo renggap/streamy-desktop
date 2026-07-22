@@ -3,6 +3,8 @@ pub mod engine;
 pub mod events;
 pub mod playlist;
 
+use tauri::Manager;
+
 #[tauri::command]
 fn ping() -> &'static str {
     "pong"
@@ -24,6 +26,9 @@ pub fn run() {
         .manage(engine::engine::AudioEngine::new())
         .manage(std::sync::Mutex::new(playlist::model::Playlist::new()))
         .setup(|app| {
+            // Hand the audio thread an AppHandle so it can emit `error` events.
+            app.state::<engine::engine::AudioEngine>()
+                .set_app(app.handle().clone());
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()

@@ -10,6 +10,7 @@ use rayon::prelude::*;
 
 use crate::engine::decoder::decode_file;
 use crate::engine::engine::AudioEngine;
+use crate::engine::resample::resample_linear;
 use crate::events;
 use crate::playlist::model::{Playlist, Track};
 
@@ -41,7 +42,10 @@ fn read_tags(path: &str) -> (String, String, f64) {
 
 /// Decode + load a track into the deck, start the stream, emit now_playing.
 fn play_at(engine: &AudioEngine, app: &AppHandle, track: &Track) -> Result<(), String> {
-    let (samples, _sr, channels) = decode_file(&track.path)?;
+    let (samples, sr, channels) = decode_file(&track.path)?;
+    // Resample decoded PCM to the output device's rate so pitch is preserved
+    // when the device's mix format differs from the file (e.g. 48000 vs 44100).
+    let samples = resample_linear(&samples, channels, sr, engine.out_rate());
     let deck = engine.deck();
     let mut d = deck.lock().map_err(|e| e.to_string())?;
     d.load(samples, channels);
