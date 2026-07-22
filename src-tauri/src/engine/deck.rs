@@ -23,6 +23,7 @@ pub struct Deck {
     path: Option<String>,
     pub playing: bool,
     ended: bool,
+    just_ended: bool,
 }
 
 impl Deck {
@@ -38,7 +39,15 @@ impl Deck {
             path: None,
             playing: false,
             ended: false,
+            just_ended: false,
         }
+    }
+
+    /// Returns true once when the track finishes naturally (distinct from pause).
+    pub fn take_ended(&mut self) -> bool {
+        let e = self.just_ended;
+        self.just_ended = false;
+        e
     }
 
     /// Open a file for streaming at the output device's rate. Cheap; no decode.
@@ -58,6 +67,7 @@ impl Deck {
         self.pcm.clear();
         self.read_pos = 0.0;
         self.ended = false;
+        self.just_ended = false;
         Ok(())
     }
 
@@ -149,6 +159,7 @@ impl Deck {
         if self.read_pos >= nframes as f64 && self.ended {
             self.playing = false;
             self.read_pos = 0.0;
+            self.just_ended = true;
         }
         frame
     }

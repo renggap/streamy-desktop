@@ -1,28 +1,38 @@
 <script lang="ts">
-  import { next, prev, pause, seek } from '../api';
+  import { next, prev, pause, play, seek } from '../api';
+  import { playing } from '../stores';
 
   let pos = $state(0); // 0..100
 
   function onSeek() {
     seek(pos / 100);
   }
+
+  function togglePlay() {
+    if ($playing) {
+      pause();
+      playing.set(false);
+    } else {
+      play();
+      playing.set(true);
+    }
+  }
 </script>
 
 <div class="flex flex-col gap-2 border-t border-zinc-800 px-4 py-3">
-  <div class="flex items-center gap-2">
+  <div class="flex items-center justify-center gap-2">
     <button
       class="rounded bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-700"
       onclick={() => prev()}
     >⏮ Prev</button>
     <button
-      class="rounded bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-700"
-      onclick={() => pause()}
-    >⏸ Pause</button>
+      class="min-w-16 rounded bg-zinc-700 px-4 py-1.5 text-sm font-medium text-zinc-100 hover:bg-zinc-600"
+      onclick={togglePlay}
+    >{$playing ? '⏸ Pause' : '▶ Play'}</button>
     <button
       class="rounded bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-700"
       onclick={() => next()}
     >⏭ Next</button>
-    <span class="ml-auto text-xs text-zinc-500">Click a track to play</span>
   </div>
   <input
     type="range"

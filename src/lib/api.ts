@@ -14,6 +14,7 @@ export const addToPlaylist = (paths: string[]) =>
   invoke<Track[]>('add_to_playlist', { paths });
 
 export const playIndex = (i: number) => invoke<void>('play_index', { i });
+export const play = () => invoke<void>('play');
 export const next = () => invoke<void>('next');
 export const prev = () => invoke<void>('prev');
 export const pause = () => invoke<void>('pause');

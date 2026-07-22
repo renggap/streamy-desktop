@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { listen } from '@tauri-apps/api/event';
-  import { nowPlaying, errorMsg } from './lib/stores';
+  import { nowPlaying, currentIndex, playing, errorMsg, playlist } from './lib/stores';
+  import { next } from './lib/api';
   import Playlist from './lib/components/Playlist.svelte';
   import Transport from './lib/components/Transport.svelte';
   import NowPlaying from './lib/components/NowPlaying.svelte';
@@ -10,12 +12,21 @@
   onMount(() => {
     const np = listen<Track>('now_playing', (e) => {
       nowPlaying.set(e.payload);
+      playing.set(true);
+      // Sync the row highlight to whatever is now playing (covers next/prev/auto-advance).
+      const idx = get(playlist).findIndex((t) => t.path === e.payload.path);
+      currentIndex.set(idx >= 0 ? idx : null);
+    });
+    const ended = listen('track_ended', () => {
+      playing.set(false);
+      next(); // auto-advance; if at end, next() is a no-op
     });
     const err = listen<string>('error', (e) => {
       errorMsg.set(e.payload);
     });
     return () => {
       np.then((u) => u());
+      ended.then((u) => u());
       err.then((u) => u());
     };
   });

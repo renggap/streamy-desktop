@@ -5,6 +5,7 @@ use crate::playlist::model::Track;
 pub const NOW_PLAYING: &str = "now_playing";
 pub const ERROR: &str = "error";
 pub const LEVELS: &str = "levels";
+pub const TRACK_ENDED: &str = "track_ended";
 
 pub fn emit_now_playing(app: &AppHandle, track: &Track) -> Result<(), String> {
     app.emit(NOW_PLAYING, track).map_err(|e| e.to_string())

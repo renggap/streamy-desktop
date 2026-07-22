@@ -201,6 +201,13 @@ fn build_output_stream(
                         let _ = h.emit(events::LEVELS, levels);
                     }
                 }
+
+                // 4. Signal track end so the UI can auto-advance.
+                if deck.take_ended() {
+                    if let Some(h) = app.lock().ok().and_then(|g| g.clone()) {
+                        let _ = h.emit(events::TRACK_ENDED, ());
+                    }
+                }
             },
             move |err: cpal::StreamError| emit_err(&app_for_err, format!("audio stream error: {err}")),
             None,
