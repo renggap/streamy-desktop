@@ -12,6 +12,8 @@
     levels,
     inputDevices,
     outputDevices,
+    profiles,
+    streamStatus,
   } from './lib/stores';
   import {
     next,
@@ -20,17 +22,20 @@
     isAudio,
     listInputDevices,
     listOutputDevices,
+    listProfiles,
+    setStreamTitle,
   } from './lib/api';
   import type { LevelMeter, Track } from './lib/api';
+  import type { StreamStatus } from './lib/stores';
   import Playlist from './lib/components/Playlist.svelte';
   import Transport from './lib/components/Transport.svelte';
   import NowPlaying from './lib/components/NowPlaying.svelte';
   import SourceToggle from './lib/components/SourceToggle.svelte';
   import Meters from './lib/components/Meters.svelte';
   import DeviceChoosers from './lib/components/DeviceChoosers.svelte';
+  import BroadcastBar from './lib/components/BroadcastBar.svelte';
 
   onMount(() => {
-    // Restore playlist state (survives a webview reload / right-click refresh).
     listPlaylist().then((snap) => {
       playlist.set(snap.tracks);
       if (snap.current != null && snap.tracks[snap.current]) {
@@ -41,18 +46,22 @@
     });
     listInputDevices().then(inputDevices.set);
     listOutputDevices().then(outputDevices.set);
+    listProfiles().then(profiles.set);
 
     const np = listen<Track>('now_playing', (e) => {
       nowPlaying.set(e.payload);
       playing.set(true);
       const idx = get(playlist).findIndex((t) => t.path === e.payload.path);
       currentIndex.set(idx >= 0 ? idx : null);
+      // Push the title to the live stream (no-op if not broadcasting).
+      setStreamTitle(e.payload.title);
     });
     const ended = listen('track_ended', () => {
       playing.set(false);
       next();
     });
     const lvl = listen<LevelMeter>('levels', (e) => levels.set(e.payload));
+    const status = listen<StreamStatus>('stream_status', (e) => streamStatus.set(e.payload));
     const err = listen<string>('error', (e) => errorMsg.set(e.payload));
 
     const dd = getCurrentWebview().onDragDropEvent((e) => {
@@ -66,6 +75,7 @@
       np.then((u) => u());
       ended.then((u) => u());
       lvl.then((u) => u());
+      status.then((u) => u());
       err.then((u) => u());
       dd.then((u) => u());
     };
@@ -94,6 +104,7 @@
     </div>
   </div>
 
+  <BroadcastBar />
   <NowPlaying />
   <Playlist />
   <Transport />

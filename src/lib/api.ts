@@ -46,6 +46,35 @@ export const setInputDevice = (name: string) =>
 export const setSourceMode = (mode: SourceMode) =>
   invoke<void>('set_source_mode', { mode });
 
+// --- P2 streaming ---
+
+export interface ConnectionProfile {
+  name: string;
+  host: string;
+  port: number;
+  user: string;
+  mount: string;
+  protocol: 'icy' | 'ultravox';
+  stream_id: number;
+  station_name: string;
+  genre: string;
+  url: string;
+  public: boolean;
+}
+
+export const BITRATES = [64, 96, 128, 160, 192, 256, 320];
+
+export const listProfiles = () => invoke<ConnectionProfile[]>('list_profiles');
+export const saveProfile = (profile: ConnectionProfile, password: string) =>
+  invoke<void>('save_profile', { profile, password });
+export const deleteProfile = (name: string) =>
+  invoke<void>('delete_profile', { name });
+export const connectStream = (name: string, bitrate_kbps: number) =>
+  invoke<void>('connect_stream', { name, bitrate_kbps });
+export const disconnectStream = () => invoke<void>('disconnect_stream');
+export const setStreamTitle = (title: string) =>
+  invoke<void>('set_stream_title', { title });
+
 export const playIndex = (i: number) => invoke<void>('play_index', { i });
 export const play = () => invoke<void>('play');
 export const next = () => invoke<void>('next');
