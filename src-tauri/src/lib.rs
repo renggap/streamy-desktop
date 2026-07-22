@@ -1,3 +1,5 @@
+pub mod playlist;
+
 #[tauri::command]
 fn ping() -> &'static str {
     "pong"
