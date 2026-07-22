@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod encode;
 pub mod engine;
 pub mod events;
 pub mod playlist;
