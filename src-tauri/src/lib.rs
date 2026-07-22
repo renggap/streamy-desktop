@@ -1,3 +1,4 @@
+pub mod commands;
 pub mod engine;
 pub mod playlist;
 
@@ -9,7 +10,13 @@ fn ping() -> &'static str {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![ping])
+        .invoke_handler(tauri::generate_handler![
+            ping,
+            commands::load_track,
+            commands::play,
+            commands::pause,
+        ])
+        .manage(std::sync::Mutex::new(engine::engine::AudioEngine::new()))
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
