@@ -24,7 +24,7 @@ export interface DeviceInfo {
 
 export interface LevelMeter {
   monitor: [number, number];
-  broadcast: [number, number];
+  mic: [number, number];
 }
 
 export const AUDIO_EXTS = ['wav', 'mp3', 'flac', 'ogg', 'oga', 'm4a', 'aac'];

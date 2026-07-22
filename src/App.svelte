@@ -86,8 +86,10 @@
 
   <div class="flex items-center gap-4 border-b border-zinc-800 px-4 py-2">
     <SourceToggle />
-    <Meters />
-    <div class="ml-auto min-w-0 max-w-[50%]">
+    <div class="min-w-[8rem] max-w-[14rem] flex-1">
+      <Meters />
+    </div>
+    <div class="ml-auto min-w-0 max-w-[45%]">
       <DeviceChoosers />
     </div>
   </div>

@@ -16,6 +16,7 @@ pub struct Deck {
     format: Option<Box<dyn FormatReader>>,
     decoder: Option<Box<dyn Decoder>>,
     channels: usize,
+    file_rate: u32,
     pcm: Vec<f32>,
     read_pos: f64,
     step: f64,
@@ -32,6 +33,7 @@ impl Deck {
             format: None,
             decoder: None,
             channels: 2,
+            file_rate: 44100,
             pcm: Vec::new(),
             read_pos: 0.0,
             step: 1.0,
@@ -41,6 +43,15 @@ impl Deck {
             ended: false,
             just_ended: false,
         }
+    }
+
+    /// Recompute the resample step for a new output device rate (keeps position).
+    pub fn set_device_rate(&mut self, device_rate: u32) {
+        self.step = if device_rate == 0 {
+            1.0
+        } else {
+            self.file_rate as f64 / device_rate as f64
+        };
     }
 
     /// Returns true once when the track finishes naturally (distinct from pause).
@@ -57,6 +68,7 @@ impl Deck {
         self.format = Some(o.format);
         self.decoder = Some(o.decoder);
         self.channels = o.channels.max(1);
+        self.file_rate = o.sample_rate;
         self.step = if device_rate == 0 {
             1.0
         } else {

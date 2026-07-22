@@ -1,19 +1,21 @@
-// P1.5: pure level-meter math. Wired into the audio callback in P1.2.
+// P1.5: level-meter math + realtime accumulator. Wired into the audio callback.
 
 use serde::{Deserialize, Serialize};
 
-/// One meter snapshot emitted on the `levels` event.
-/// `broadcast` stays zero until the encoder lands in P2.
+/// One meter snapshot emitted on the `levels` event: monitor (what the DJ
+/// hears) + mic (input), per channel. broadcast joins in P2.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct LevelMeter {
     pub monitor: [f32; 2],
-    pub broadcast: [f32; 2],
+    pub mic: [f32; 2],
 }
 
 /// Realtime meter accumulator: running per-channel peak since the last emit,
 /// emitted ~30 fps. No allocation in the audio callback.
 pub struct Meter {
+    sample_rate: u32,
     acc_mon: [f32; 2],
+    acc_mic: [f32; 2],
     frames: usize,
     emit_every: usize,
 }
@@ -21,29 +23,45 @@ pub struct Meter {
 impl Meter {
     pub fn new(sample_rate: u32) -> Self {
         Self {
+            sample_rate,
             acc_mon: [0.0, 0.0],
+            acc_mic: [0.0, 0.0],
             frames: 0,
-            emit_every: ((sample_rate as f64 / 30.0).round() as usize).max(1),
+            emit_every: emit_window(sample_rate),
         }
     }
-    pub fn push(&mut self, mon: [f32; 2]) {
+
+    pub fn set_sample_rate(&mut self, sample_rate: u32) {
+        self.sample_rate = sample_rate;
+        self.emit_every = emit_window(sample_rate);
+    }
+
+    pub fn push(&mut self, mon: [f32; 2], mic: [f32; 2]) {
         self.acc_mon[0] = self.acc_mon[0].max(mon[0].abs());
         self.acc_mon[1] = self.acc_mon[1].max(mon[1].abs());
+        self.acc_mic[0] = self.acc_mic[0].max(mic[0].abs());
+        self.acc_mic[1] = self.acc_mic[1].max(mic[1].abs());
         self.frames += 1;
     }
+
     pub fn take(&mut self) -> Option<LevelMeter> {
         if self.frames >= self.emit_every {
-            let m = self.acc_mon;
+            let m = LevelMeter {
+                monitor: self.acc_mon,
+                mic: self.acc_mic,
+            };
             self.acc_mon = [0.0, 0.0];
+            self.acc_mic = [0.0, 0.0];
             self.frames = 0;
-            Some(LevelMeter {
-                monitor: m,
-                broadcast: [0.0, 0.0],
-            })
+            Some(m)
         } else {
             None
         }
     }
+}
+
+fn emit_window(sample_rate: u32) -> usize {
+    ((sample_rate as f64 / 30.0).round() as usize).max(1)
 }
 
 /// Per-channel peak (max |sample|) over a window of stereo frames.
@@ -98,7 +116,6 @@ mod tests {
 
     #[test]
     fn rms_matches_definition() {
-        // mono-ish frames [0.5,0.5],[0.5,0.5] -> rms 0.5 per channel
         let r = rms(&[[0.5, 0.5], [0.5, 0.5]]);
         assert!((r[0] - 0.5).abs() < 1e-4);
         assert!((r[1] - 0.5).abs() < 1e-4);
@@ -108,5 +125,17 @@ mod tests {
     fn meters_empty_is_zero() {
         assert_eq!(peak(&[]), [0.0, 0.0]);
         assert_eq!(rms(&[]), [0.0, 0.0]);
+    }
+
+    #[test]
+    fn meter_accumulates_and_emits() {
+        let mut m = Meter::new(30); // emit_every = 1 frame
+        m.push([0.4, 0.6], [0.2, 0.8]);
+        let l = m.take().unwrap();
+        assert!((l.monitor[0] - 0.4).abs() < 1e-6);
+        assert!((l.monitor[1] - 0.6).abs() < 1e-6);
+        assert!((l.mic[1] - 0.8).abs() < 1e-6);
+        // resets after take
+        assert!(m.take().is_none());
     }
 }
