@@ -18,6 +18,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3" }
 cc = "1"
 
+[features]
+aac = ["fdk-aac"]
+
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -32,3 +35,4 @@ lofty = "0.22"
 rayon = "1"
 tokio = { version = "1", features = ["rt", "macros", "net", "io-util", "time", "sync"] }
 keyring = "3"
+fdk-aac = { version = "0.8", optional = true }

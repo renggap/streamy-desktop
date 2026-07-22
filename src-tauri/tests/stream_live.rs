@@ -10,7 +10,7 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-use streamy_desktop::encode::{encode, EncoderConfig};
+use streamy_desktop::encode::{encode, Codec, EncoderConfig};
 use streamy_desktop::stream::broadcast;
 use streamy_desktop::stream::ultravox::{connect, send_mp3, UltravoxConfig};
 
@@ -48,6 +48,7 @@ fn one_second_tone_mp3() -> Vec<u8> {
             sample_rate: 44_100,
             channels: 2,
             bitrate_kbps: 128,
+            codec: Codec::Mp3,
         },
     )
     .expect("encode")
@@ -117,6 +118,7 @@ async fn broadcast_ring_drives_server_live() {
         sample_rate: 44_100,
         channels: 2,
         bitrate_kbps: 128,
+        codec: Codec::Mp3,
     };
 
     let (mut tx, rx) = rtrb::RingBuffer::<[f32; 2]>::new(16384);

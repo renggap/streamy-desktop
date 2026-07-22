@@ -1,4 +1,4 @@
-use streamy_desktop::encode::{encode, EncoderConfig};
+use streamy_desktop::encode::{encode, Codec, EncoderConfig};
 
 #[test]
 fn encode_sine_produces_mp3_frames_and_expected_size() {
@@ -17,6 +17,7 @@ fn encode_sine_produces_mp3_frames_and_expected_size() {
             sample_rate: sr,
             channels: 2,
             bitrate_kbps: 128,
+            codec: Codec::Mp3,
         },
     )
     .expect("encode");
@@ -41,6 +42,7 @@ fn unsupported_bitrate_errors() {
         sample_rate: 44100,
         channels: 2,
         bitrate_kbps: 123,
+        codec: Codec::Mp3,
     })
     .is_err());
 }

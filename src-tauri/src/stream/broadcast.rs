@@ -17,7 +17,7 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use crate::encode::{EncoderConfig, Mp3Encoder};
+use crate::encode::{self, EncoderConfig};
 use crate::events;
 use crate::stream::ultravox::{self, UltravoxConfig};
 
@@ -90,7 +90,7 @@ pub async fn start_with_opts(
     // thread (and in turn the audio ring) — a brief pause, not a stall.
     let stop_enc = stop.clone();
     std::thread::spawn(move || {
-        let mut enc = match Mp3Encoder::new(&enc_cfg) {
+        let mut enc = match encode::build(&enc_cfg) {
             Ok(e) => e,
             Err(_) => return,
         };

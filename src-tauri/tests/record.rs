@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicBool;
 
 use streamy_desktop::encode::EncoderConfig;
 use streamy_desktop::record::{frame_to_s16le, run, wav_header, RecFormat};
+use streamy_desktop::encode::Codec;
 
 #[test]
 fn wav_header_is_canonical_44_bytes() {
@@ -52,7 +53,7 @@ fn wav_run_writes_header_and_all_samples() {
     run(
         &mut rx,
         RecFormat::Wav,
-        &EncoderConfig { sample_rate: 44100, channels: 2, bitrate_kbps: 192 },
+        &EncoderConfig { sample_rate: 44100, channels: 2, bitrate_kbps: 192, codec: Codec::Mp3 },
         44100,
         &mut out,
         &stop,
@@ -80,7 +81,7 @@ fn mp3_run_is_byte_identical_to_direct_encode() {
     }
     let stop = AtomicBool::new(true);
     let mut rec_out = Vec::<u8>::new();
-    let cfg = EncoderConfig { sample_rate: 44100, channels: 2, bitrate_kbps: 192 };
+    let cfg = EncoderConfig { sample_rate: 44100, channels: 2, bitrate_kbps: 192, codec: Codec::Mp3 };
     run(&mut rx, RecFormat::Mp3, &cfg, 44100, &mut rec_out, &stop).unwrap();
 
     // Direct encode mirroring the recorder's fixed-chunk loop.
@@ -135,7 +136,7 @@ fn run_propagates_write_error() {
     }
     let stop = AtomicBool::new(false); // keep running so it hits the cap mid-stream
     let mut sink = FailingSink { cap: 4096, written: 0 };
-    let cfg = EncoderConfig { sample_rate: 44100, channels: 2, bitrate_kbps: 192 };
+    let cfg = EncoderConfig { sample_rate: 44100, channels: 2, bitrate_kbps: 192, codec: Codec::Mp3 };
     let res = run(&mut rx, RecFormat::Mp3, &cfg, 44100, &mut sink, &stop);
     assert!(res.is_err(), "write error must propagate, got {res:?}");
     let msg = res.unwrap_err();

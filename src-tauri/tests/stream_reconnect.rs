@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
-use streamy_desktop::encode::EncoderConfig;
+use streamy_desktop::encode::{Codec, EncoderConfig};
 use streamy_desktop::stream::broadcast;
 use streamy_desktop::stream::ultravox::{encode_frame, read_frame, UltravoxConfig};
 
@@ -108,7 +108,7 @@ async fn reconnects_with_backoff_after_drops() {
     let prod_stop = Arc::new(AtomicBool::new(false));
     spawn_producer(tx, prod_stop.clone());
 
-    let enc = EncoderConfig { sample_rate: 44100, channels: 2, bitrate_kbps: 128 };
+    let enc = EncoderConfig { sample_rate: 44100, channels: 2, bitrate_kbps: 128, codec: Codec::Mp3 };
     // Test-sized backoff: real enough to exercise the reconnect path, fast enough
     // to keep the test well under a second.
     let handle = broadcast::start_with_opts(

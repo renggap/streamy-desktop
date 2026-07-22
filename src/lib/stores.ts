@@ -15,6 +15,7 @@ export const sourceMode = writable<SourceMode>('file');
 
 export const profiles = writable<ConnectionProfile[]>([]);
 export const bitrate = writable(128);
+export const codec = writable<'mp3' | 'aac'>('mp3');
 export const streamStatus = writable<StreamStatus>({ state: 'disconnected' });
 
 export interface StreamStatus {

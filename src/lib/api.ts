@@ -71,8 +71,8 @@ export const saveProfile = (profile: ConnectionProfile, password: string | null)
   invoke<void>('save_profile', { profile, password });
 export const deleteProfile = (name: string) =>
   invoke<void>('delete_profile', { name });
-export const connectStream = (name: string, bitrate_kbps: number) =>
-  invoke<void>('connect_stream', { name, bitrateKbps: bitrate_kbps });
+export const connectStream = (name: string, bitrate_kbps: number, codec: 'mp3' | 'aac') =>
+  invoke<void>('connect_stream', { name, bitrateKbps: bitrate_kbps, codec });
 export const disconnectStream = () => invoke<void>('disconnect_stream');
 export const setStreamTitle = (title: string) =>
   invoke<void>('set_stream_title', { title });

@@ -13,7 +13,7 @@ use crate::diag;
 use crate::engine::device;
 use crate::engine::engine::AudioEngine;
 use crate::engine::mixer::SourceMode;
-use crate::encode::EncoderConfig;
+use crate::encode::{Codec, EncoderConfig};
 use crate::events;
 use crate::playlist::model::{Playlist, Track};
 use crate::profile::store::{ConnectionProfile, ProfileStore};
@@ -243,6 +243,7 @@ pub fn delete_profile(name: String, store: State<'_, ProfileStore>) -> Result<()
 pub async fn connect_stream(
     name: String,
     bitrate_kbps: u32,
+    codec: Codec,
     engine: State<'_, AudioEngine>,
     profiles: State<'_, ProfileStore>,
     bcast: State<'_, Mutex<Option<BroadcastHandle>>>,
@@ -254,19 +255,23 @@ pub async fn connect_stream(
             return Err("already connected".into());
         }
     }
-    diag::log(format!("connect_stream -> '{name}' @ {bitrate_kbps} kbps"));
+    diag::log(format!("connect_stream -> '{name}' @ {bitrate_kbps} kbps {codec:?}"));
     let profile = profiles
         .list()
         .into_iter()
         .find(|p| p.name == name)
         .ok_or_else(|| format!("no profile named {name}"))?;
     let password = profiles.get_password(&name)?;
+    let content_type = match codec {
+        Codec::Mp3 => "audio/mpeg",
+        Codec::Aac => "audio/aacp",
+    };
     let uvox_cfg = UltravoxConfig {
         host: profile.host,
         port: profile.port,
         stream_id: profile.stream_id,
         password,
-        content_type: "audio/mpeg".into(),
+        content_type: content_type.into(),
         bitrate_kbps,
         name: profile.station_name,
         genre: profile.genre,
@@ -276,6 +281,7 @@ pub async fn connect_stream(
         sample_rate: engine.output_rate(),
         channels: 2,
         bitrate_kbps,
+        codec,
     };
 
     let (tx, rx) = rtrb::RingBuffer::<[f32; 2]>::new(16384);
@@ -365,6 +371,7 @@ pub async fn start_recording(
         sample_rate: rate,
         channels: 2,
         bitrate_kbps: 192,
+        codec: Codec::Mp3,
     };
     let (tx, rx) = rtrb::RingBuffer::<[f32; 2]>::new(16384);
     engine.set_record_producer(Some(tx));

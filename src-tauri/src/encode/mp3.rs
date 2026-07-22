@@ -26,11 +26,12 @@ extern "C" {
     fn lame_close(gfp: *mut LameGlobalFlags) -> c_int;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct EncoderConfig {
     pub sample_rate: u32,
     pub channels: u8,
     pub bitrate_kbps: u32,
+    pub codec: super::Codec,
 }
 
 const SUPPORTED_BITRATES: [u32; 16] = [
