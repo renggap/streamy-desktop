@@ -36,6 +36,10 @@ impl Meter {
         self.emit_every = emit_window(sample_rate);
     }
 
+    pub fn rate(&self) -> u32 {
+        self.sample_rate
+    }
+
     pub fn push(&mut self, mon: [f32; 2], mic: [f32; 2]) {
         self.acc_mon[0] = self.acc_mon[0].max(mon[0].abs());
         self.acc_mon[1] = self.acc_mon[1].max(mon[1].abs());

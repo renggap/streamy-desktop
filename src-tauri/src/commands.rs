@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 use lofty::config::ParseOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
@@ -12,9 +12,12 @@ use rayon::prelude::*;
 use crate::engine::device;
 use crate::engine::engine::AudioEngine;
 use crate::engine::mixer::SourceMode;
+use crate::encode::EncoderConfig;
 use crate::events;
 use crate::playlist::model::{Playlist, Track};
 use crate::profile::store::{ConnectionProfile, ProfileStore};
+use crate::stream::broadcast::{self, BroadcastHandle, StreamStatus};
+use crate::stream::ultravox::UltravoxConfig;
 
 /// Read (title, artist, duration_secs) from tags; fall back to filename + 0.
 /// Skips cover-art parsing (we don't display it) — the expensive part on files
@@ -217,4 +220,75 @@ pub fn save_profile(
 #[tauri::command]
 pub fn delete_profile(name: String, store: State<'_, ProfileStore>) -> Result<(), String> {
     store.delete(&name)
+}
+
+// --- P2.2 connect / disconnect (Ultravox broadcast) ---
+
+#[tauri::command]
+pub async fn connect_stream(
+    name: String,
+    bitrate_kbps: u32,
+    engine: State<'_, AudioEngine>,
+    profiles: State<'_, ProfileStore>,
+    bcast: State<'_, Mutex<Option<BroadcastHandle>>>,
+    app: AppHandle,
+) -> Result<(), String> {
+    {
+        let g = bcast.lock().map_err(|e| e.to_string())?;
+        if g.is_some() {
+            return Err("already connected".into());
+        }
+    }
+    let profile = profiles
+        .list()
+        .into_iter()
+        .find(|p| p.name == name)
+        .ok_or_else(|| format!("no profile named {name}"))?;
+    let password = profiles.get_password(&name)?;
+    let uvox_cfg = UltravoxConfig {
+        host: profile.host,
+        port: profile.port,
+        stream_id: profile.stream_id,
+        password,
+        content_type: "audio/mpeg".into(),
+        bitrate_kbps,
+        name: profile.station_name,
+        genre: profile.genre,
+        url: profile.url,
+    };
+    let enc_cfg = EncoderConfig {
+        sample_rate: engine.output_rate(),
+        channels: 2,
+        bitrate_kbps,
+    };
+
+    let (tx, rx) = rtrb::RingBuffer::<[f32; 2]>::new(16384);
+    engine.set_broadcast_producer(Some(tx));
+    match broadcast::start(rx, uvox_cfg, enc_cfg, Some(app)).await {
+        Ok(h) => {
+            if let Ok(mut g) = bcast.lock() {
+                *g = Some(h);
+            }
+            Ok(())
+        }
+        Err(e) => {
+            engine.set_broadcast_producer(None);
+            Err(e)
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn disconnect_stream(
+    engine: State<'_, AudioEngine>,
+    bcast: State<'_, Mutex<Option<BroadcastHandle>>>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let h = bcast.lock().map_err(|e| e.to_string())?.take();
+    if let Some(h) = h {
+        h.stop().await;
+    }
+    engine.set_broadcast_producer(None);
+    let _ = app.emit(events::STREAM_STATUS, StreamStatus::Disconnected);
+    Ok(())
 }

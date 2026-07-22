@@ -36,8 +36,13 @@ pub fn run() {
             commands::list_profiles,
             commands::save_profile,
             commands::delete_profile,
+            commands::connect_stream,
+            commands::disconnect_stream,
         ])
         .manage(engine::engine::AudioEngine::new())
+        .manage(std::sync::Mutex::new(
+            None::<stream::broadcast::BroadcastHandle>,
+        ))
         .manage(std::sync::Mutex::new(playlist::model::Playlist::new()))
         .setup(|app| {
             // Hand the audio thread an AppHandle so it can emit `error` events.

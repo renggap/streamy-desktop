@@ -52,7 +52,85 @@ fn check(v: c_int) -> Result<(), String> {
     }
 }
 
-/// Encode interleaved f32 PCM to MP3 bytes. Mono input is up-mixed to stereo.
+/// Stateful MP3 encoder for continuous streaming: keeps one lame handle alive
+/// across `encode()` calls (no per-chunk flush, so the bit reservoir stays
+/// continuous). `flush()` only at the end of the stream.
+pub struct Mp3Encoder {
+    gfp: *mut LameGlobalFlags,
+}
+// The lame handle is used from a single thread (the encoder thread).
+unsafe impl Send for Mp3Encoder {}
+
+impl Mp3Encoder {
+    pub fn new(cfg: &EncoderConfig) -> Result<Self, String> {
+        bitrate_from_kbps(cfg.bitrate_kbps)?;
+        unsafe {
+            let gfp = lame_init();
+            if gfp.is_null() {
+                return Err("lame_init failed".to_string());
+            }
+            if let Err(e) = (|| -> Result<(), String> {
+                check(lame_set_num_channels(gfp, 2))?;
+                check(lame_set_in_samplerate(gfp, cfg.sample_rate as c_int))?;
+                check(lame_set_brate(gfp, cfg.bitrate_kbps as c_int))?;
+                check(lame_init_params(gfp))
+            })() {
+                lame_close(gfp);
+                return Err(e);
+            }
+            Ok(Mp3Encoder { gfp })
+        }
+    }
+
+    /// Encode interleaved stereo f32 PCM to MP3 bytes (no flush).
+    pub fn encode(&mut self, samples: &[f32]) -> Result<Vec<u8>, String> {
+        let pcm: Vec<i16> = samples
+            .iter()
+            .map(|&s| (s.clamp(-1.0, 1.0) * 32767.0) as i16)
+            .collect();
+        let num_samples = (pcm.len() / 2) as c_int;
+        if num_samples == 0 {
+            return Ok(Vec::new());
+        }
+        unsafe {
+            let bufsize = ((num_samples as f64) * 1.25 + 7200.0) as usize + 16;
+            let mut buf = vec![0u8; bufsize];
+            let n = lame_encode_buffer_interleaved(
+                self.gfp,
+                pcm.as_ptr(),
+                num_samples,
+                buf.as_mut_ptr(),
+                bufsize as c_int,
+            );
+            if n < 0 {
+                return Err(format!("lame_encode error {n}"));
+            }
+            buf.truncate(n as usize);
+            Ok(buf)
+        }
+    }
+
+    /// Flush the encoder (end of stream).
+    pub fn flush(&mut self) -> Result<Vec<u8>, String> {
+        unsafe {
+            let mut buf = vec![0u8; 8192];
+            let n = lame_encode_flush(self.gfp, buf.as_mut_ptr(), 8192);
+            if n < 0 {
+                return Err(format!("lame_flush error {n}"));
+            }
+            buf.truncate(n as usize);
+            Ok(buf)
+        }
+    }
+}
+
+impl Drop for Mp3Encoder {
+    fn drop(&mut self) {
+        unsafe {
+            lame_close(self.gfp);
+        }
+    }
+}
 pub fn encode(samples: &[f32], cfg: &EncoderConfig) -> Result<Vec<u8>, String> {
     bitrate_from_kbps(cfg.bitrate_kbps)?;
 

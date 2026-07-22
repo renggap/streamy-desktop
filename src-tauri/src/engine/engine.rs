@@ -40,6 +40,9 @@ struct EngineState {
     source_mode: SourceMode,
     cons: rtrb::Consumer<Action>,
     mic_cons: rtrb::Consumer<[f32; 2]>,
+    /// When broadcasting, the callback pushes the broadcast bus into this ring
+    /// for the encoder thread to consume.
+    broadcast_tx: Option<rtrb::Producer<[f32; 2]>>,
 }
 
 /// Send + `Sync` handle to the audio backend.
@@ -48,6 +51,7 @@ pub struct AudioEngine {
     sig: mpsc::Sender<Signal>,
     app: Arc<Mutex<Option<AppHandle>>>,
     mic: MicInput,
+    state: Arc<Mutex<EngineState>>,
 }
 
 impl AudioEngine {
@@ -65,6 +69,7 @@ impl AudioEngine {
             source_mode: SourceMode::File,
             cons,
             mic_cons,
+            broadcast_tx: None,
         }));
 
         let app_for_thread = app.clone();
@@ -77,6 +82,7 @@ impl AudioEngine {
             sig: sig_tx,
             app,
             mic,
+            state,
         }
     }
 
@@ -107,6 +113,21 @@ impl AudioEngine {
     }
     pub fn set_input_device(&self, name: String) -> Result<(), String> {
         self.mic.set_device(name)
+    }
+
+    /// Install/remove the broadcast-bus producer the callback pushes to.
+    pub fn set_broadcast_producer(&self, tx: Option<rtrb::Producer<[f32; 2]>>) {
+        if let Ok(mut s) = self.state.lock() {
+            s.broadcast_tx = tx;
+        }
+    }
+
+    /// Current output device sample rate (broadcast PCM is at this rate).
+    pub fn output_rate(&self) -> u32 {
+        self.state
+            .lock()
+            .map(|s| s.meter.rate())
+            .unwrap_or(FALLBACK_RATE)
     }
 }
 
@@ -235,6 +256,13 @@ fn build_output_stream(
                             &[deck_frame, mic_frame],
                             &[sends.decks_monitor, sends.mic_monitor],
                         );
+                        let bcast = mix_bus(
+                            &[deck_frame, mic_frame],
+                            &[sends.decks_broadcast, sends.mic_broadcast],
+                        );
+                        if let Some(tx) = s.broadcast_tx.as_mut() {
+                            let _ = tx.push(bcast);
+                        }
                         s.meter.push(mon, mic_frame);
                         write_frame(frame, mon[0], mon[1]);
                     }

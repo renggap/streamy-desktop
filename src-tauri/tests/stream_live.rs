@@ -3,12 +3,15 @@
 //!     cargo test --test stream_live -- --nocapture --ignored
 
 use std::f32::consts::PI;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use streamy_desktop::encode::{encode, EncoderConfig};
+use streamy_desktop::stream::broadcast;
 use streamy_desktop::stream::ultravox::{connect, send_mp3, UltravoxConfig};
 
 fn cfg() -> UltravoxConfig {
@@ -100,4 +103,50 @@ async fn stream_and_verify_live() {
     // Keep the source briefly so the listener path could catch it, then drop.
     tokio::time::sleep(Duration::from_secs(1)).await;
     drop(s);
+}
+
+#[tokio::test]
+#[ignore]
+async fn broadcast_ring_drives_server_live() {
+    // Drives the broadcast path (ring -> encoder thread -> streamer -> Ultravox)
+    // with a realtime 440Hz tone, then checks the server went live.
+    let uvox = cfg();
+    let host = uvox.host.clone();
+    let port = uvox.port;
+    let enc_cfg = EncoderConfig {
+        sample_rate: 44_100,
+        channels: 2,
+        bitrate_kbps: 128,
+    };
+
+    let (mut tx, rx) = rtrb::RingBuffer::<[f32; 2]>::new(16384);
+    let stop = Arc::new(AtomicBool::new(false));
+    let stop_p = stop.clone();
+    std::thread::spawn(move || {
+        let sr = 44_100.0_f64;
+        let mut i: u64 = 0;
+        while !stop_p.load(Ordering::Relaxed) {
+            for _ in 0..4410 {
+                // 0.1s of frames
+                let v = (0.9 * (2.0 * std::f64::consts::PI * 440.0 * i as f64 / sr).sin()) as f32;
+                let _ = tx.push([v, v]);
+                i += 1;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    });
+
+    let handle = broadcast::start(rx, uvox, enc_cfg, None)
+        .await
+        .expect("broadcast start");
+    tokio::time::sleep(Duration::from_secs(4)).await;
+
+    let stats = http_get(&host, port, "/stats?sid=1").await;
+    println!("--- broadcast /stats ---\n{stats}");
+    let live = stats.contains("<STREAMSTATUS>1</STREAMSTATUS>");
+    println!("broadcast STREAMSTATUS live = {live}");
+
+    stop.store(true, Ordering::Relaxed);
+    handle.stop().await;
+    assert!(live, "server did not report the stream as live");
 }
