@@ -2,8 +2,11 @@ use std::sync::Mutex;
 
 use tauri::{AppHandle, State};
 
+use lofty::config::ParseOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
+use lofty::probe::Probe;
 use lofty::tag::Accessor;
+use rayon::prelude::*;
 
 use crate::engine::decoder::decode_file;
 use crate::engine::engine::AudioEngine;
@@ -11,13 +14,16 @@ use crate::events;
 use crate::playlist::model::{Playlist, Track};
 
 /// Read (title, artist, duration_secs) from tags; fall back to filename + 0.
+/// Skips cover-art parsing (we don't display it) — the expensive part on files
+/// with large embedded art / under AV-scanned I/O.
 fn read_tags(path: &str) -> (String, String, f64) {
     let filename = std::path::Path::new(path)
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("unknown")
         .to_string();
-    match lofty::read_from_path(path) {
+    let opts = ParseOptions::new().read_cover_art(false);
+    match Probe::open(path).and_then(|p| p.options(opts).read()) {
         Ok(tf) => {
             let tag = tf.primary_tag();
             let title = tag
@@ -50,15 +56,23 @@ pub fn add_to_playlist(
     paths: Vec<String>,
     playlist: State<'_, Mutex<Playlist>>,
 ) -> Result<Vec<Track>, String> {
+    // Parse tags in parallel — tag reads are I/O bound (and on Windows, each
+    // open is contended by Defender), so a parallel map is a large win.
+    let parsed: Vec<Track> = paths
+        .par_iter()
+        .map(|path| {
+            let (title, artist, duration_secs) = read_tags(path);
+            Track {
+                path: path.clone(),
+                title,
+                artist,
+                duration_secs,
+            }
+        })
+        .collect();
     let mut p = playlist.lock().map_err(|e| e.to_string())?;
-    for path in paths {
-        let (title, artist, duration_secs) = read_tags(&path);
-        p.add(Track {
-            path,
-            title,
-            artist,
-            duration_secs,
-        });
+    for t in parsed {
+        p.add(t);
     }
     Ok(p.tracks.clone())
 }
