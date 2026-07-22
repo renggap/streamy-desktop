@@ -13,6 +13,7 @@ pub struct Playlist {
     pub tracks: Vec<Track>,
     pub repeat: bool,
     pub shuffle: bool,
+    pub current: Option<usize>,
     // ponytail: deterministic shuffle seeded at runtime; Math-free for tests via index rotation.
     shuf_state: usize,
 }
@@ -23,6 +24,7 @@ impl Playlist {
             tracks: vec![],
             repeat: false,
             shuffle: false,
+            current: None,
             shuf_state: 0,
         }
     }

@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod engine;
+pub mod events;
 pub mod playlist;
 
 #[tauri::command]
@@ -12,11 +13,15 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             ping,
-            commands::load_track,
-            commands::play,
+            commands::add_to_playlist,
+            commands::play_index,
+            commands::next,
+            commands::prev,
             commands::pause,
+            commands::seek,
         ])
         .manage(engine::engine::AudioEngine::new())
+        .manage(std::sync::Mutex::new(playlist::model::Playlist::new()))
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
