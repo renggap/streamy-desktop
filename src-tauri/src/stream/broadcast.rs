@@ -2,6 +2,10 @@
 // to MP3 with one stateful lame handle, and a tokio streamer task sends Ultravox
 // 0x7000 frames to the server. Realtime pacing is inherent: the audio callback
 // pushes at realtime, so the whole chain is throttled to realtime (no bursting).
+//
+// P2.7: the streamer owns a reconnect loop. On a mid-stream socket error it emits
+// Disconnected → Connecting, waits with exponential backoff, re-handshakes, and
+// resumes. The initial connect is still surfaced to the caller (Connect button).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -9,6 +13,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
+use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -20,6 +25,11 @@ use crate::stream::ultravox::{self, UltravoxConfig};
 const MAX_PAYLOAD: usize = 16_000;
 /// Encode 0.1s of stereo at a time (44100 Hz).
 const ENCODE_FRAMES: usize = 4410;
+
+/// Default reconnect backoff: start here, double each failure, cap at max.
+const BACKOFF_BASE: Duration = Duration::from_millis(500);
+const BACKOFF_MAX: Duration = Duration::from_secs(30);
+const HANDSHAKE_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Serialize, Clone)]
 #[serde(tag = "state", rename_all = "lowercase")]
@@ -36,24 +46,35 @@ pub struct BroadcastHandle {
     pub metadata_tx: mpsc::Sender<String>,
 }
 
-/// Connect Ultravox and run the encoder + streamer against `rx` (broadcast PCM).
+/// Connect Ultravox and run the encoder + streamer against `rx` (broadcast PCM),
+/// reconnecting with default backoff on mid-stream drops.
 pub async fn start(
-    mut rx: rtrb::Consumer<[f32; 2]>,
+    rx: rtrb::Consumer<[f32; 2]>,
     uvox_cfg: UltravoxConfig,
     enc_cfg: EncoderConfig,
     app: Option<AppHandle>,
 ) -> Result<BroadcastHandle, String> {
+    start_with_opts(rx, uvox_cfg, enc_cfg, app, BACKOFF_BASE, BACKOFF_MAX, HANDSHAKE_TIMEOUT_SECS).await
+}
+
+/// As `start` but with explicit backoff/timeout — used by tests to keep the
+/// reconnect dance fast and deterministic.
+pub async fn start_with_opts(
+    mut rx: rtrb::Consumer<[f32; 2]>,
+    uvox_cfg: UltravoxConfig,
+    enc_cfg: EncoderConfig,
+    app: Option<AppHandle>,
+    backoff_base: Duration,
+    backoff_max: Duration,
+    handshake_timeout_secs: u64,
+) -> Result<BroadcastHandle, String> {
     emit_status(&app, StreamStatus::Connecting);
 
-    // Cap the handshake so a silent server can't hang Connect forever.
-    let mut stream = match tokio::time::timeout(Duration::from_secs(15), ultravox::connect(&uvox_cfg)).await {
-        Ok(Ok(s)) => s,
-        Ok(Err(e)) => {
-            emit_status(&app, StreamStatus::Error { message: e.clone() });
-            return Err(e);
-        }
-        Err(_) => {
-            let e = "connect timed out after 15s".to_string();
+    // Initial connect: failure here is returned to the caller (Connect button
+    // shows it). Mid-stream drops are handled by the reconnect loop below.
+    let mut stream = match connect_with_timeout(&uvox_cfg, handshake_timeout_secs).await {
+        Ok(s) => s,
+        Err(e) => {
             emit_status(&app, StreamStatus::Error { message: e.clone() });
             return Err(e);
         }
@@ -65,6 +86,8 @@ pub async fn start(
     let (metadata_tx, mut metadata_rx) = mpsc::channel::<String>(16);
 
     // Encoder thread: ring -> lame -> MP3 chunks (paced by realtime producer).
+    // During a reconnect the channel fills and blocking_send backpressures this
+    // thread (and in turn the audio ring) — a brief pause, not a stall.
     let stop_enc = stop.clone();
     std::thread::spawn(move || {
         let mut enc = match Mp3Encoder::new(&enc_cfg) {
@@ -104,20 +127,39 @@ pub async fn start(
     });
 
     // Streamer task: MP3 chunks -> Ultravox 0x7000 frames; metadata on demand.
+    // On socket error, reconnect with growing backoff and resume.
     let stop_str = stop.clone();
     let streamer = tokio::spawn(async move {
         loop {
             if stop_str.load(Ordering::Relaxed) {
                 break;
             }
-            tokio::select! {
-                chunk = mp3_rx.recv() => match chunk {
-                    Some(c) => { let _ = ultravox::send_mp3(&mut stream, &c).await; }
-                    None => break, // encoder thread dropped the sender
-                },
-                title = metadata_rx.recv() => {
-                    if let Some(t) = title {
-                        let _ = ultravox::send_metadata(&mut stream, &t).await;
+            let dropped = run_stream(&mut stream, &mut mp3_rx, &mut metadata_rx, &stop_str).await;
+            if stop_str.load(Ordering::Relaxed) {
+                break;
+            }
+            if !dropped {
+                break; // clean stop or encoder dropped its sender
+            }
+            // Mid-stream drop: announce and reconnect with backoff.
+            emit_status(&app, StreamStatus::Disconnected);
+            emit_status(&app, StreamStatus::Connecting);
+            let mut delay = backoff_base;
+            loop {
+                if stop_str.load(Ordering::Relaxed) {
+                    break;
+                }
+                if sleep_interruptible(delay, &stop_str).await {
+                    break;
+                }
+                match connect_with_timeout(&uvox_cfg, handshake_timeout_secs).await {
+                    Ok(s) => {
+                        stream = s;
+                        emit_status(&app, StreamStatus::Connected);
+                        break;
+                    }
+                    Err(_) => {
+                        delay = (delay * 2).min(backoff_max);
                     }
                 }
             }
@@ -125,6 +167,63 @@ pub async fn start(
     });
 
     Ok(BroadcastHandle { stop, streamer, metadata_tx })
+}
+
+/// Stream until the socket errors (returns `true` → caller reconnects) or stop is
+/// requested / the encoder dropped its sender (returns `false`).
+async fn run_stream(
+    stream: &mut TcpStream,
+    mp3_rx: &mut mpsc::Receiver<Vec<u8>>,
+    metadata_rx: &mut mpsc::Receiver<String>,
+    stop: &Arc<AtomicBool>,
+) -> bool {
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            return false;
+        }
+        tokio::select! {
+            chunk = mp3_rx.recv() => match chunk {
+                Some(c) => {
+                    if ultravox::send_mp3(stream, &c).await.is_err() {
+                        return true;
+                    }
+                }
+                None => return false,
+            },
+            title = metadata_rx.recv() => {
+                if let Some(t) = title {
+                    if ultravox::send_metadata(stream, &t).await.is_err() {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Sleep for `d`, ticking every 100ms so `stop` is observed promptly. Returns
+/// true if stop was requested during the wait.
+async fn sleep_interruptible(d: Duration, stop: &Arc<AtomicBool>) -> bool {
+    let mut remaining = d;
+    let tick = Duration::from_millis(100);
+    while remaining > Duration::ZERO {
+        if stop.load(Ordering::Relaxed) {
+            return true;
+        }
+        let step = remaining.min(tick);
+        tokio::time::sleep(step).await;
+        remaining -= step;
+    }
+    false
+}
+
+/// Run the Ultravox handshake with a cap so a silent server can't hang Connect.
+async fn connect_with_timeout(cfg: &UltravoxConfig, timeout_secs: u64) -> Result<TcpStream, String> {
+    match tokio::time::timeout(Duration::from_secs(timeout_secs), ultravox::connect(cfg)).await {
+        Ok(Ok(s)) => Ok(s),
+        Ok(Err(e)) => Err(e),
+        Err(_) => Err(format!("connect timed out after {timeout_secs}s")),
+    }
 }
 
 fn push_chunks(tx: &mpsc::Sender<Vec<u8>>, mp3: &[u8]) {
