@@ -72,7 +72,7 @@ export const saveProfile = (profile: ConnectionProfile, password: string) =>
 export const deleteProfile = (name: string) =>
   invoke<void>('delete_profile', { name });
 export const connectStream = (name: string, bitrate_kbps: number) =>
-  invoke<void>('connect_stream', { name, bitrate_kbps });
+  invoke<void>('connect_stream', { name, bitrateKbps: bitrate_kbps });
 export const disconnectStream = () => invoke<void>('disconnect_stream');
 export const setStreamTitle = (title: string) =>
   invoke<void>('set_stream_title', { title });
