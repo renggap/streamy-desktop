@@ -41,6 +41,7 @@
   import DeviceChoosers from './lib/components/DeviceChoosers.svelte';
   import BroadcastBar from './lib/components/BroadcastBar.svelte';
   import RecordBar from './lib/components/RecordBar.svelte';
+  import Mixer from './lib/components/Mixer.svelte';
   import ProfileManager from './lib/components/ProfileManager.svelte';
   import BottomNav from './lib/components/BottomNav.svelte';
 
@@ -136,6 +137,10 @@
         <div class="border-t border-zinc-800 pt-3">
           <h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Levels</h3>
           <Meters />
+        </div>
+        <div class="border-t border-zinc-800 pt-3">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Mixer</h3>
+          <Mixer />
         </div>
       </div>
     {:else}

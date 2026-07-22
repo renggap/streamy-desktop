@@ -14,6 +14,26 @@ pub fn mix_bus(frames: &[[f32; 2]], sends: &[f32]) -> [f32; 2] {
     [l, r]
 }
 
+/// Equal-power (constant-voltage) crossfade. `pos` 0..1: 0 = full A, 1 = full B.
+/// gA² + gB² == 1 for all positions, so total power is constant across the fade.
+pub fn equal_power(pos: f32) -> (f32, f32) {
+    let p = pos.clamp(0.0, 1.0) * (std::f32::consts::PI / 2.0);
+    (p.cos(), p.sin())
+}
+
+/// Mic auto-duck gain (linear) from the music level. Below `threshold` the mic is
+/// untouched; above it the mic ducks up to `depth_db` by full-scale music.
+/// `music_linear` is an RMS/peak level in 0..1.
+pub fn duck_gain(music_linear: f32, threshold: f32, depth_db: f32) -> f32 {
+    if music_linear <= threshold || depth_db <= 0.0 {
+        return 1.0;
+    }
+    let span = (1.0 - threshold).max(1e-6);
+    let over = ((music_linear - threshold) / span).clamp(0.0, 1.0);
+    let db = -depth_db * over;
+    10.0_f32.powf(db / 20.0)
+}
+
 /// What the DJ picks as going to air. Drives broadcast vs. monitor sends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -105,5 +125,60 @@ mod tests {
         assert_eq!(s.mic_broadcast, 1.0);
         assert_eq!(s.decks_monitor, 1.0);
         assert_eq!(s.mic_monitor, 1.0);
+    }
+
+    // --- P5.2 equal-power crossfade ---
+
+    #[test]
+    fn crossfade_endpoints_are_solo() {
+        let (a0, b0) = equal_power(0.0);
+        assert!((a0 - 1.0).abs() < 1e-6 && b0.abs() < 1e-6);
+        let (a1, b1) = equal_power(1.0);
+        assert!((b1 - 1.0).abs() < 1e-6 && a1.abs() < 1e-6);
+    }
+
+    #[test]
+    fn crossfade_is_constant_power() {
+        // gA^2 + gB^2 == 1 everywhere (no level dip through the middle).
+        for i in 0..=100 {
+            let p = i as f32 / 100.0;
+            let (ga, gb) = equal_power(p);
+            let pow = ga * ga + gb * gb;
+            assert!((pow - 1.0).abs() < 1e-5, "power {pow} at pos {p}");
+        }
+    }
+
+    #[test]
+    fn crossfade_center_is_minus_3db() {
+        let (ga, gb) = equal_power(0.5);
+        assert!((ga - gb).abs() < 1e-6, "center should be symmetric");
+        // ~0.707 = -3 dB on each side.
+        assert!((ga - (2.0_f32).sqrt() / 2.0).abs() < 1e-5);
+    }
+
+    // --- P5.4 mic duck ---
+
+    #[test]
+    fn duck_below_threshold_is_unity() {
+        assert!((duck_gain(0.1, 0.2, 12.0) - 1.0).abs() < 1e-6);
+        assert!((duck_gain(0.0, 0.2, 12.0) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn duck_at_full_scale_hits_depth() {
+        // threshold 0.2, depth 12 dB, full-scale music -> -12 dB = 0.251
+        let g = duck_gain(1.0, 0.2, 12.0);
+        assert!((g - 10.0_f32.powf(-12.0 / 20.0)).abs() < 1e-3, "g={g}");
+    }
+
+    #[test]
+    fn duck_is_monotonic_decreasing() {
+        let mut last = 2.0_f32;
+        for i in 0..=20 {
+            let lvl = 0.2 + (i as f32 / 20.0) * 0.8;
+            let g = duck_gain(lvl, 0.2, 12.0);
+            assert!(g <= last + 1e-6, "not monotonic at {lvl}: {g} > {last}");
+            last = g;
+        }
     }
 }

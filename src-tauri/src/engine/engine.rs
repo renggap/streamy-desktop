@@ -8,12 +8,17 @@ use cpal::{BufferSize, SampleRate, Stream, StreamConfig};
 use tauri::{AppHandle, Emitter};
 
 use super::deck::Deck;
+use super::eq::Eq3Band;
 use super::meter::{Meter, Position};
 use super::mic::MicInput;
-use super::mixer::{mix_bus, sends_for, SourceMode};
+use super::mixer::{duck_gain, equal_power, mix_bus, sends_for, SourceMode};
 use crate::events;
 
 const FALLBACK_RATE: u32 = 44100;
+/// Crossfade ramp speed: ~0.4s to cross the full sweep at the device rate.
+const CROSSFADE_SECS: f32 = 0.4;
+/// Mic-duck envelope smoothing factor per frame.
+const DUCK_SMOOTH: f32 = 0.02;
 
 /// Control messages pushed from the UI thread, drained at the top of each
 /// audio callback.
@@ -23,6 +28,9 @@ pub enum Action {
     Pause,
     Seek(f64),
     SourceMode(SourceMode),
+    SetCrossfade(f32),
+    SetEq(f64, f64, f64),
+    SetDuck(bool, f32, f32),
 }
 
 /// Signals to the audio loop: rebuild the stream (e.g. output device lost) or
@@ -35,7 +43,21 @@ enum Signal {
 /// All realtime state, shared across stream rebuilds so a device hot-swap
 /// (headphone unplug) can rebuild the stream without losing playback.
 struct EngineState {
-    deck: Deck,
+    deck_a: Deck,
+    deck_b: Deck,
+    /// 0 = deck A is "current", 1 = deck B. Playlist Load targets the other.
+    active: u8,
+    /// Crossfader position 0..1 (0 = full A, 1 = full B), ramped toward target.
+    crossfade: f32,
+    crossfade_target: f32,
+    fade_step: f32,
+    eq_a: Eq3Band,
+    eq_b: Eq3Band,
+    duck_enabled: bool,
+    duck_threshold: f32,
+    duck_depth_db: f32,
+    music_rms: f32,
+    duck_gain: f32,
     meter: Meter,
     source_mode: SourceMode,
     cons: rtrb::Consumer<Action>,
@@ -46,6 +68,16 @@ struct EngineState {
     /// When recording, the callback taps the same broadcast mix into this ring
     /// for the recorder thread. Independent of `broadcast_tx` (record-only works).
     record_tx: Option<rtrb::Producer<[f32; 2]>>,
+}
+
+impl EngineState {
+    fn active_deck(&mut self) -> &mut Deck {
+        if self.active == 0 {
+            &mut self.deck_a
+        } else {
+            &mut self.deck_b
+        }
+    }
 }
 
 /// Send + `Sync` handle to the audio backend.
@@ -67,7 +99,19 @@ impl AudioEngine {
         let (sig_tx, sig_rx) = mpsc::channel::<Signal>();
         let app: Arc<Mutex<Option<AppHandle>>> = Arc::new(Mutex::new(None));
         let state = Arc::new(Mutex::new(EngineState {
-            deck: Deck::new(),
+            deck_a: Deck::new(),
+            deck_b: Deck::new(),
+            active: 0,
+            crossfade: 0.0,
+            crossfade_target: 0.0,
+            fade_step: 1.0 / (CROSSFADE_SECS * FALLBACK_RATE as f32),
+            eq_a: Eq3Band::new(FALLBACK_RATE as f64),
+            eq_b: Eq3Band::new(FALLBACK_RATE as f64),
+            duck_enabled: false,
+            duck_threshold: 0.15,
+            duck_depth_db: 12.0,
+            music_rms: 0.0,
+            duck_gain: 1.0,
             meter: Meter::new(FALLBACK_RATE),
             source_mode: SourceMode::File,
             cons,
@@ -114,6 +158,15 @@ impl AudioEngine {
     }
     pub fn set_source_mode(&self, m: SourceMode) -> Result<(), String> {
         self.push(Action::SourceMode(m))
+    }
+    pub fn set_crossfade(&self, pos: f32) -> Result<(), String> {
+        self.push(Action::SetCrossfade(pos))
+    }
+    pub fn set_eq(&self, low_db: f64, mid_db: f64, high_db: f64) -> Result<(), String> {
+        self.push(Action::SetEq(low_db, mid_db, high_db))
+    }
+    pub fn set_duck(&self, enabled: bool, threshold: f32, depth_db: f32) -> Result<(), String> {
+        self.push(Action::SetDuck(enabled, threshold, depth_db))
     }
     pub fn set_input_device(&self, name: String) -> Result<(), String> {
         self.mic.set_device(name)
@@ -170,7 +223,9 @@ fn audio_loop(
         // Adapt meter window + deck resample step to this device's rate.
         if let Ok(mut s) = state.lock() {
             s.meter.set_sample_rate(cfg.sample_rate.0);
-            s.deck.set_device_rate(cfg.sample_rate.0);
+            s.deck_a.set_device_rate(cfg.sample_rate.0);
+            s.deck_b.set_device_rate(cfg.sample_rate.0);
+            s.fade_step = 1.0 / (CROSSFADE_SECS * cfg.sample_rate.0 as f32);
         }
         match build_output_stream(state.clone(), app.clone(), sig_tx.clone(), &cfg) {
             Ok(stream) => {
@@ -253,27 +308,75 @@ fn build_output_stream(
                     // 1. Drain control queue.
                     while let Ok(action) = s.cons.pop() {
                         match action {
-                            Action::Load(p) => match s.deck.open(&p, device_rate) {
-                                Ok(()) => s.deck.playing = true,
-                                Err(e) => emit_err(&app, format!("load failed: {e}")),
-                            },
-                            Action::Play => s.deck.playing = true,
-                            Action::Pause => s.deck.playing = false,
-                            Action::Seek(pct) => s.deck.seek(pct, device_rate),
+                            // Load into the INACTIVE deck, flip active, and ramp
+                            // the crossfader to it — A/B alternation on track change.
+                            Action::Load(p) => {
+                                let target = 1 - s.active;
+                                let deck = if target == 0 { &mut s.deck_a } else { &mut s.deck_b };
+                                match deck.open(&p, device_rate) {
+                                    Ok(()) => {
+                                        deck.playing = true;
+                                        s.active = target;
+                                        s.crossfade_target = if target == 0 { 0.0 } else { 1.0 };
+                                    }
+                                    Err(e) => emit_err(&app, format!("load failed: {e}")),
+                                }
+                            }
+                            Action::Play => s.active_deck().playing = true,
+                            Action::Pause => s.active_deck().playing = false,
+                            Action::Seek(pct) => s.active_deck().seek(pct, device_rate),
                             Action::SourceMode(m) => s.source_mode = m,
+                            Action::SetCrossfade(pos) => {
+                                let p = pos.clamp(0.0, 1.0);
+                                s.crossfade = p;
+                                s.crossfade_target = p;
+                            }
+                            Action::SetEq(lo, mid, hi) => {
+                                s.eq_a.set_gains_db(lo, mid, hi);
+                                s.eq_b.set_gains_db(lo, mid, hi);
+                            }
+                            Action::SetDuck(en, th, db) => {
+                                s.duck_enabled = en;
+                                s.duck_threshold = th;
+                                s.duck_depth_db = db;
+                            }
                         }
                     }
                     // 2. Produce + meter frames.
                     let sends = sends_for(s.source_mode);
                     for frame in out.chunks_mut(channels.max(1)) {
-                        let deck_frame = s.deck.next_frame();
+                        // Two decks -> per-deck EQ -> equal-power crossfade.
+                        let raw_a = s.deck_a.next_frame();
+                        let raw_b = s.deck_b.next_frame();
+                        let a = s.eq_a.process(raw_a);
+                        let b = s.eq_b.process(raw_b);
+                        let diff = s.crossfade_target - s.crossfade;
+                        if diff.abs() <= s.fade_step {
+                            s.crossfade = s.crossfade_target;
+                        } else {
+                            s.crossfade += s.fade_step * diff.signum();
+                        }
+                        let (ga, gb) = equal_power(s.crossfade);
+                        let deck_frame = [a[0] * ga + b[0] * gb, a[1] * ga + b[1] * gb];
+
+                        // Mic auto-duck: track music RMS, ease the duck gain.
+                        let inst = ((deck_frame[0] * deck_frame[0] + deck_frame[1] * deck_frame[1]) * 0.5).sqrt();
+                        s.music_rms += DUCK_SMOOTH * (inst - s.music_rms);
                         let mic_frame = s.mic_cons.pop().unwrap_or([0.0, 0.0]);
+                        let target_duck = if s.duck_enabled {
+                            duck_gain(s.music_rms, s.duck_threshold, s.duck_depth_db)
+                        } else {
+                            1.0
+                        };
+                        s.duck_gain += DUCK_SMOOTH * (target_duck - s.duck_gain);
+                        let mic_out = [mic_frame[0] * s.duck_gain, mic_frame[1] * s.duck_gain];
+
                         let mon = mix_bus(
-                            &[deck_frame, mic_frame],
+                            &[deck_frame, mic_out],
                             &[sends.decks_monitor, sends.mic_monitor],
                         );
                         let bcast = mix_bus(
-                            &[deck_frame, mic_frame],
+                            &[deck_frame, mic_out],
                             &[sends.decks_broadcast, sends.mic_broadcast],
                         );
                         if let Some(tx) = s.broadcast_tx.as_mut() {
@@ -282,20 +385,20 @@ fn build_output_stream(
                         if let Some(tx) = s.record_tx.as_mut() {
                             let _ = tx.push(bcast);
                         }
-                        s.meter.push(mon, mic_frame);
+                        s.meter.push(mon, mic_out);
                         write_frame(frame, mon[0], mon[1]);
                     }
                     let levels = s.meter.take();
                     let pos = levels
                         .is_some()
-                        .then(|| s.deck.position())
+                        .then(|| s.active_deck().position())
                         .flatten()
                         .map(|(p, e, t)| Position {
                             pct: p,
                             elapsed_secs: e,
                             total_secs: t,
                         });
-                    (levels, pos, s.deck.take_ended())
+                    (levels, pos, s.active_deck().take_ended())
                 };
                 // 3. Emit outside the lock.
                 if let Some(l) = levels {

@@ -2,6 +2,7 @@ pub mod deck;
 pub mod decoder;
 pub mod device;
 pub mod engine;
+pub mod eq;
 pub mod meter;
 pub mod mic;
 pub mod mixer;

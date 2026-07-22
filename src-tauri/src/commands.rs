@@ -191,6 +191,21 @@ pub fn set_source_mode(mode: SourceMode, engine: State<'_, AudioEngine>) -> Resu
 }
 
 #[tauri::command]
+pub fn set_crossfade(pos: f32, engine: State<'_, AudioEngine>) -> Result<(), String> {
+    engine.set_crossfade(pos)
+}
+
+#[tauri::command]
+pub fn set_eq(low_db: f64, mid_db: f64, high_db: f64, engine: State<'_, AudioEngine>) -> Result<(), String> {
+    engine.set_eq(low_db, mid_db, high_db)
+}
+
+#[tauri::command]
+pub fn set_duck(enabled: bool, threshold: f32, depth_db: f32, engine: State<'_, AudioEngine>) -> Result<(), String> {
+    engine.set_duck(enabled, threshold, depth_db)
+}
+
+#[tauri::command]
 pub fn list_input_devices() -> Vec<device::DeviceInfo> {
     device::list_input_devices()
 }

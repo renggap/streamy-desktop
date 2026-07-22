@@ -13,6 +13,15 @@ export const outputDevices = writable<DeviceInfo[]>([]);
 export const selectedInput = writable<string>('');
 export const sourceMode = writable<SourceMode>('file');
 
+// P5 mixer state.
+export const crossfade = writable(0); // 0=A .. 1=B
+export const eqLow = writable(0);
+export const eqMid = writable(0);
+export const eqHigh = writable(0);
+export const duckEnabled = writable(false);
+export const duckThreshold = writable(0.15);
+export const duckDepth = writable(12);
+
 export const profiles = writable<ConnectionProfile[]>([]);
 export const bitrate = writable(128);
 export const codec = writable<'mp3' | 'aac'>('mp3');

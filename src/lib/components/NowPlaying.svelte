@@ -52,11 +52,11 @@
     >
       ♪
     </div>
-    <div class="min-w-0 flex-1">
-      <div class="truncate text-sm font-medium text-zinc-100">
+    <div class="lcd min-w-0 flex-1">
+      <div class="truncate text-sm font-medium">
         {$nowPlaying?.title ?? 'Nothing playing'}
       </div>
-      <div class="truncate text-xs text-zinc-400">{$nowPlaying?.artist || '—'}</div>
+      <div class="truncate text-xs opacity-80">{$nowPlaying?.artist || '—'}</div>
     </div>
     <button class="rounded p-2 text-zinc-300 hover:bg-zinc-800" onclick={() => prev()} aria-label="Previous"
       >⏮</button

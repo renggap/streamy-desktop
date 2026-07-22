@@ -16,3 +16,36 @@ body,
   display: flex;
   flex-direction: column;
 }
+
+/* --- P5.5 retro Winamp-ish skin layer (additive; doesn't override Tailwind) --- */
+html,
+body {
+  background:
+    radial-gradient(120% 80% at 50% -10%, #1f2937 0%, #09090b 55%, #000 100%);
+}
+
+/* LCD readout: green-on-black monospace with a soft glow, for now-playing + timers. */
+.lcd {
+  font-family: 'DejaVu Sans Mono', 'Consolas', ui-monospace, monospace;
+  background: linear-gradient(#0a1410, #050a08);
+  border: 1px solid #064e3b;
+  border-radius: 4px;
+  padding: 4px 8px;
+  box-shadow: inset 0 0 8px rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  text-shadow: 0 0 6px rgba(52, 211, 153, 0.65);
+}
+
+/* Chrome bevel for panels. */
+.retro-chrome {
+  background: linear-gradient(#18181b, #0c0c0e);
+  border: 1px solid #27272a;
+  border-top-color: #3f3f46;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 6px 14px rgba(0, 0, 0, 0.5);
+}
+
+/* Range thumbs get the LED accent across browsers. */
+input[type='range'] {
+  accent-color: #10b981;
+}
+

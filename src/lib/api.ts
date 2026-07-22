@@ -47,6 +47,12 @@ export const getSettings = () =>
   invoke<{ input_device: string | null; output_device: string | null }>('get_settings');
 export const setSourceMode = (mode: SourceMode) =>
   invoke<void>('set_source_mode', { mode });
+export const setCrossfade = (pos: number) =>
+  invoke<void>('set_crossfade', { pos });
+export const setEq = (low_db: number, mid_db: number, high_db: number) =>
+  invoke<void>('set_eq', { lowDb: low_db, midDb: mid_db, highDb: high_db });
+export const setDuck = (enabled: boolean, threshold: number, depth_db: number) =>
+  invoke<void>('set_duck', { enabled, threshold, depthDb: depth_db });
 
 // --- P2 streaming ---
 
