@@ -29,3 +29,4 @@ rtrb = "0.3"
 cpal = "0.15"
 lofty = "0.22"
 rayon = "1"
+tokio = { version = "1", features = ["rt", "macros", "net", "io-util", "time", "sync"] }

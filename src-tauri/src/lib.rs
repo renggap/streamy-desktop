@@ -2,6 +2,7 @@ pub mod commands;
 pub mod engine;
 pub mod events;
 pub mod playlist;
+pub mod stream;
 
 use tauri::Manager;
 

@@ -203,7 +203,6 @@ fn build_output_stream(
         .ok_or_else(|| "no default output device".to_string())?;
     let channels = cfg.channels as usize;
     let device_rate = cfg.sample_rate.0;
-    let app_for_err = app.clone();
 
     let stream = device
         .build_output_stream(
