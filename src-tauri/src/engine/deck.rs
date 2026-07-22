@@ -107,7 +107,17 @@ impl Deck {
                 time: Time::new(target.floor() as u64, target.fract()),
                 track_id: None,
             };
-            let _ = format.seek(SeekMode::Accurate, to);
+            // Accurate (index) seek first; fall back to coarse for index-less
+            // containers (e.g. some MP3s), which seek by byte estimate.
+            if let Err(e) = format.seek(SeekMode::Accurate, to) {
+                let to2 = SeekTo::Time {
+                    time: Time::new(target.floor() as u64, target.fract()),
+                    track_id: None,
+                };
+                if let Err(e2) = format.seek(SeekMode::Coarse, to2) {
+                    crate::diag::log(format!("seek failed: {e} / coarse: {e2}"));
+                }
+            }
         }
         self.pcm.clear();
         self.read_pos = 0.0;

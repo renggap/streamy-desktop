@@ -16,6 +16,7 @@
     streamStatus,
     position,
     view,
+    selectedInput,
   } from './lib/stores';
   import {
     next,
@@ -26,6 +27,7 @@
     listOutputDevices,
     listProfiles,
     setStreamTitle,
+    getSettings,
   } from './lib/api';
   import type { LevelMeter, Track } from './lib/api';
   import type { Position, StreamStatus } from './lib/stores';
@@ -50,6 +52,10 @@
     listInputDevices().then(inputDevices.set);
     listOutputDevices().then(outputDevices.set);
     listProfiles().then(profiles.set);
+    // Restore the persisted mic choice for display (backend re-applies it too).
+    getSettings().then((s) => {
+      if (s.input_device) selectedInput.set(s.input_device);
+    });
 
     const np = listen<Track>('now_playing', (e) => {
       nowPlaying.set(e.payload);

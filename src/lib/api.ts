@@ -43,6 +43,8 @@ export const listInputDevices = () => invoke<DeviceInfo[]>('list_input_devices')
 export const listOutputDevices = () => invoke<DeviceInfo[]>('list_output_devices');
 export const setInputDevice = (name: string) =>
   invoke<void>('set_input_device', { name });
+export const getSettings = () =>
+  invoke<{ input_device: string | null; output_device: string | null }>('get_settings');
 export const setSourceMode = (mode: SourceMode) =>
   invoke<void>('set_source_mode', { mode });
 

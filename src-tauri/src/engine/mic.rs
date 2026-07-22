@@ -32,6 +32,13 @@ impl MicInput {
             .send(MicCmd::SetDevice(name))
             .map_err(|e| e.to_string())
     }
+
+    /// Ask the mic thread to reopen on whatever the OS default input is.
+    pub fn open_default(&self) -> Result<(), String> {
+        self.control
+            .send(MicCmd::SetDevice(String::new()))
+            .map_err(|e| e.to_string())
+    }
 }
 
 impl Drop for MicInput {
@@ -47,7 +54,11 @@ fn mic_loop(producer: Arc<Mutex<Producer<[f32; 2]>>>, rx: mpsc::Receiver<MicCmd>
         match cmd {
             MicCmd::SetDevice(name) => {
                 drop(stream.take());
-                stream = open_by_name(&host, &name, &producer);
+                stream = if name.is_empty() {
+                    open_default(&host, &producer)
+                } else {
+                    open_by_name(&host, &name, &producer)
+                };
             }
             MicCmd::Shutdown => break,
         }

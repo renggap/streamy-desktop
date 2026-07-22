@@ -14,5 +14,7 @@ pub fn emit_now_playing(app: &AppHandle, track: &Track) -> Result<(), String> {
 }
 
 pub fn emit_error(app: &AppHandle, msg: impl Into<String>) {
-    let _ = app.emit(ERROR, msg.into());
+    let m = msg.into();
+    crate::diag::log(format!("ERROR: {m}"));
+    let _ = app.emit(ERROR, m);
 }

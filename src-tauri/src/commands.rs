@@ -9,6 +9,7 @@ use lofty::probe::Probe;
 use lofty::tag::Accessor;
 use rayon::prelude::*;
 
+use crate::diag;
 use crate::engine::device;
 use crate::engine::engine::AudioEngine;
 use crate::engine::mixer::SourceMode;
@@ -16,6 +17,7 @@ use crate::encode::EncoderConfig;
 use crate::events;
 use crate::playlist::model::{Playlist, Track};
 use crate::profile::store::{ConnectionProfile, ProfileStore};
+use crate::settings::{Settings, SettingsStore};
 use crate::stream::broadcast::{self, BroadcastHandle, StreamStatus};
 use crate::stream::ultravox::UltravoxConfig;
 
@@ -178,6 +180,7 @@ pub fn pause(engine: State<'_, AudioEngine>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn seek(pct: f64, engine: State<'_, AudioEngine>) -> Result<(), String> {
+    diag::log(format!("seek -> {pct}"));
     engine.seek(pct)
 }
 
@@ -197,8 +200,19 @@ pub fn list_output_devices() -> Vec<device::DeviceInfo> {
 }
 
 #[tauri::command]
-pub fn set_input_device(name: String, engine: State<'_, AudioEngine>) -> Result<(), String> {
-    engine.set_input_device(name)
+pub fn set_input_device(
+    name: String,
+    engine: State<'_, AudioEngine>,
+    settings: State<'_, SettingsStore>,
+) -> Result<(), String> {
+    diag::log(format!("set_input_device -> '{name}'"));
+    engine.set_input_device(name.clone())?;
+    settings.set_input_device(name)
+}
+
+#[tauri::command]
+pub fn get_settings(settings: State<'_, SettingsStore>) -> Settings {
+    settings.get()
 }
 
 // --- P2.4/2.5 connection profiles ---
@@ -239,6 +253,7 @@ pub async fn connect_stream(
             return Err("already connected".into());
         }
     }
+    diag::log(format!("connect_stream -> '{name}' @ {bitrate_kbps} kbps"));
     let profile = profiles
         .list()
         .into_iter()

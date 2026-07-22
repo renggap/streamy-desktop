@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { profiles, streamStatus, bitrate, view } from '../stores';
+  import { profiles, streamStatus, bitrate, view, errorMsg } from '../stores';
   import { connectStream, disconnectStream, BITRATES } from '../api';
 
   let selected = $state('');
@@ -22,11 +22,15 @@
           : '○ Off air'
   );
 
-  function toggle() {
+  async function toggle() {
     if (connected) {
-      disconnectStream();
+      await disconnectStream();
     } else if (selected) {
-      connectStream(selected, $bitrate);
+      try {
+        await connectStream(selected, $bitrate);
+      } catch (e) {
+        errorMsg.set(String(e));
+      }
     } else {
       view.set('settings'); // no profile -> go create one
     }

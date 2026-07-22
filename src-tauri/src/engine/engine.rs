@@ -115,6 +115,11 @@ impl AudioEngine {
         self.mic.set_device(name)
     }
 
+    /// Restore the OS default input (startup / when no saved device).
+    pub fn open_default_input(&self) -> Result<(), String> {
+        self.mic.open_default()
+    }
+
     /// Install/remove the broadcast-bus producer the callback pushes to.
     pub fn set_broadcast_producer(&self, tx: Option<rtrb::Producer<[f32; 2]>>) {
         if let Ok(mut s) = self.state.lock() {

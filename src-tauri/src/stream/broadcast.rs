@@ -45,9 +45,15 @@ pub async fn start(
 ) -> Result<BroadcastHandle, String> {
     emit_status(&app, StreamStatus::Connecting);
 
-    let mut stream = match ultravox::connect(&uvox_cfg).await {
-        Ok(s) => s,
-        Err(e) => {
+    // Cap the handshake so a silent server can't hang Connect forever.
+    let mut stream = match tokio::time::timeout(Duration::from_secs(15), ultravox::connect(&uvox_cfg)).await {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => {
+            emit_status(&app, StreamStatus::Error { message: e.clone() });
+            return Err(e);
+        }
+        Err(_) => {
+            let e = "connect timed out after 15s".to_string();
             emit_status(&app, StreamStatus::Error { message: e.clone() });
             return Err(e);
         }
