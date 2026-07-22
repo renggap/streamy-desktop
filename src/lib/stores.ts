@@ -20,3 +20,13 @@ export interface StreamStatus {
   state: 'connecting' | 'connected' | 'disconnected' | 'error';
   message?: string;
 }
+
+export type View = 'home' | 'stream' | 'settings';
+export const view = writable<View>('home');
+
+export interface Position {
+  pct: number;
+  elapsed_secs: number;
+  total_secs: number;
+}
+export const position = writable<Position>({ pct: 0, elapsed_secs: 0, total_secs: 0 });

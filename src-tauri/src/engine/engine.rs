@@ -8,7 +8,7 @@ use cpal::{BufferSize, SampleRate, Stream, StreamConfig};
 use tauri::{AppHandle, Emitter};
 
 use super::deck::Deck;
-use super::meter::Meter;
+use super::meter::{Meter, Position};
 use super::mic::MicInput;
 use super::mixer::{mix_bus, sends_for, SourceMode};
 use crate::events;
@@ -229,7 +229,7 @@ fn build_output_stream(
         .build_output_stream(
             cfg,
             move |out: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                let (levels, ended) = {
+                let (levels, pos, ended) = {
                     let mut s = match state.lock() {
                         Ok(g) => g,
                         Err(_) => return,
@@ -266,12 +266,27 @@ fn build_output_stream(
                         s.meter.push(mon, mic_frame);
                         write_frame(frame, mon[0], mon[1]);
                     }
-                    (s.meter.take(), s.deck.take_ended())
+                    let levels = s.meter.take();
+                    let pos = levels
+                        .is_some()
+                        .then(|| s.deck.position())
+                        .flatten()
+                        .map(|(p, e, t)| Position {
+                            pct: p,
+                            elapsed_secs: e,
+                            total_secs: t,
+                        });
+                    (levels, pos, s.deck.take_ended())
                 };
                 // 3. Emit outside the lock.
                 if let Some(l) = levels {
                     if let Some(h) = app.lock().ok().and_then(|g| g.clone()) {
                         let _ = h.emit(events::LEVELS, l);
+                    }
+                }
+                if let Some(p) = pos {
+                    if let Some(h) = app.lock().ok().and_then(|g| g.clone()) {
+                        let _ = h.emit(events::POSITION, p);
                     }
                 }
                 if ended {

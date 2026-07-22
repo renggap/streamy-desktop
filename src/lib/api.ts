@@ -62,7 +62,7 @@ export interface ConnectionProfile {
   public: boolean;
 }
 
-export const BITRATES = [64, 96, 128, 160, 192, 256, 320];
+export const BITRATES = [16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
 
 export const listProfiles = () => invoke<ConnectionProfile[]>('list_profiles');
 export const saveProfile = (profile: ConnectionProfile, password: string) =>

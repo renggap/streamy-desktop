@@ -7,6 +7,7 @@ pub const ERROR: &str = "error";
 pub const LEVELS: &str = "levels";
 pub const TRACK_ENDED: &str = "track_ended";
 pub const STREAM_STATUS: &str = "stream_status";
+pub const POSITION: &str = "position";
 
 pub fn emit_now_playing(app: &AppHandle, track: &Track) -> Result<(), String> {
     app.emit(NOW_PLAYING, track).map_err(|e| e.to_string())

@@ -61,6 +61,15 @@ impl Deck {
         e
     }
 
+    /// Playback position: (pct 0..1, elapsed_secs, total_secs). None if no track.
+    pub fn position(&self) -> Option<(f64, f64, f64)> {
+        if self.file_rate == 0 || self.total_secs <= 0.0 {
+            return None;
+        }
+        let elapsed = self.read_pos / self.file_rate as f64;
+        Some((elapsed / self.total_secs, elapsed, self.total_secs))
+    }
+
     /// Open a file for streaming at the output device's rate. Cheap; no decode.
     /// Does not touch `playing` — caller decides.
     pub fn open(&mut self, path: &str, device_rate: u32) -> Result<(), String> {

@@ -14,6 +14,8 @@
     outputDevices,
     profiles,
     streamStatus,
+    position,
+    view,
   } from './lib/stores';
   import {
     next,
@@ -26,14 +28,15 @@
     setStreamTitle,
   } from './lib/api';
   import type { LevelMeter, Track } from './lib/api';
-  import type { StreamStatus } from './lib/stores';
-  import Playlist from './lib/components/Playlist.svelte';
-  import Transport from './lib/components/Transport.svelte';
+  import type { Position, StreamStatus } from './lib/stores';
   import NowPlaying from './lib/components/NowPlaying.svelte';
+  import Playlist from './lib/components/Playlist.svelte';
   import SourceToggle from './lib/components/SourceToggle.svelte';
   import Meters from './lib/components/Meters.svelte';
   import DeviceChoosers from './lib/components/DeviceChoosers.svelte';
   import BroadcastBar from './lib/components/BroadcastBar.svelte';
+  import ProfileManager from './lib/components/ProfileManager.svelte';
+  import BottomNav from './lib/components/BottomNav.svelte';
 
   onMount(() => {
     listPlaylist().then((snap) => {
@@ -53,7 +56,6 @@
       playing.set(true);
       const idx = get(playlist).findIndex((t) => t.path === e.payload.path);
       currentIndex.set(idx >= 0 ? idx : null);
-      // Push the title to the live stream (no-op if not broadcasting).
       setStreamTitle(e.payload.title);
     });
     const ended = listen('track_ended', () => {
@@ -61,6 +63,7 @@
       next();
     });
     const lvl = listen<LevelMeter>('levels', (e) => levels.set(e.payload));
+    const pos = listen<Position>('position', (e) => position.set(e.payload));
     const status = listen<StreamStatus>('stream_status', (e) => streamStatus.set(e.payload));
     const err = listen<string>('error', (e) => errorMsg.set(e.payload));
 
@@ -75,6 +78,7 @@
       np.then((u) => u());
       ended.then((u) => u());
       lvl.then((u) => u());
+      pos.then((u) => u());
       status.then((u) => u());
       err.then((u) => u());
       dd.then((u) => u());
@@ -88,24 +92,39 @@
       class="flex items-start gap-2 border-b border-red-900 bg-red-950/60 px-4 py-2 text-sm text-red-200"
     >
       <span class="flex-1">{$errorMsg}</span>
-      <button class="text-red-300 hover:text-red-100" onclick={() => errorMsg.set(null)}
-        >✕</button
-      >
+      <button class="text-red-300 hover:text-red-100" onclick={() => errorMsg.set(null)}>✕</button>
     </div>
   {/if}
 
-  <div class="flex items-center gap-4 border-b border-zinc-800 px-4 py-2">
-    <SourceToggle />
-    <div class="min-w-[8rem] max-w-[14rem] flex-1">
-      <Meters />
-    </div>
-    <div class="ml-auto min-w-0 max-w-[45%]">
-      <DeviceChoosers />
-    </div>
-  </div>
-
-  <BroadcastBar />
   <NowPlaying />
-  <Playlist />
-  <Transport />
+
+  <section class="min-h-0 flex-1 overflow-y-auto">
+    {#if $view === 'home'}
+      <Playlist />
+    {:else if $view === 'stream'}
+      <div class="space-y-4 p-4">
+        <BroadcastBar />
+        <div class="border-t border-zinc-800 pt-3">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Source</h3>
+          <SourceToggle />
+        </div>
+        <div class="border-t border-zinc-800 pt-3">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Levels</h3>
+          <Meters />
+        </div>
+      </div>
+    {:else}
+      <div class="space-y-5 p-4">
+        <div>
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Devices</h3>
+          <DeviceChoosers />
+        </div>
+        <div class="border-t border-zinc-800 pt-3">
+          <ProfileManager />
+        </div>
+      </div>
+    {/if}
+  </section>
+
+  <BottomNav />
 </main>

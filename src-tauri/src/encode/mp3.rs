@@ -33,7 +33,9 @@ pub struct EncoderConfig {
     pub bitrate_kbps: u32,
 }
 
-const SUPPORTED_BITRATES: [u32; 7] = [64, 96, 128, 160, 192, 256, 320];
+const SUPPORTED_BITRATES: [u32; 16] = [
+    16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320,
+];
 
 /// Validate / return a supported kbps preset.
 pub fn bitrate_from_kbps(kbps: u32) -> Result<u32, String> {

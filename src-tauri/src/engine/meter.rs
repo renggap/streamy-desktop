@@ -10,6 +10,14 @@ pub struct LevelMeter {
     pub mic: [f32; 2],
 }
 
+/// Playback position emitted on the `position` event.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Position {
+    pub pct: f64,
+    pub elapsed_secs: f64,
+    pub total_secs: f64,
+}
+
 /// Realtime meter accumulator: running per-channel peak since the last emit,
 /// emitted ~30 fps. No allocation in the audio callback.
 pub struct Meter {
