@@ -25,6 +25,9 @@ pub fn run() {
             commands::pause,
             commands::seek,
             commands::set_source_mode,
+            commands::list_input_devices,
+            commands::list_output_devices,
+            commands::set_input_device,
         ])
         .manage(engine::engine::AudioEngine::new())
         .manage(std::sync::Mutex::new(playlist::model::Playlist::new()))

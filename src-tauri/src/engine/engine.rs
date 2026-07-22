@@ -8,6 +8,7 @@ use tauri::{AppHandle, Emitter};
 
 use super::deck::Deck;
 use super::meter::Meter;
+use super::mic::MicInput;
 use super::mixer::{mix_bus, sends_for, SourceMode};
 use crate::events;
 
@@ -30,6 +31,7 @@ pub struct AudioEngine {
     control: Mutex<rtrb::Producer<Action>>,
     shutdown: mpsc::Sender<()>,
     app: Arc<Mutex<Option<AppHandle>>>,
+    mic: MicInput,
 }
 
 impl AudioEngine {
@@ -52,13 +54,24 @@ impl AudioEngine {
         let app: Arc<Mutex<Option<AppHandle>>> = Arc::new(Mutex::new(None));
         let app_for_thread = app.clone();
 
-        thread::spawn(move || audio_loop(cons, shutdown_rx, app_for_thread, cfg));
+        // Mic ring: producer → mic input thread, consumer → output callback.
+        let (mic_prod, mic_cons) = rtrb::RingBuffer::<[f32; 2]>::new(8192);
+        let mic_prod = Arc::new(Mutex::new(mic_prod));
+        let mic = MicInput::new(mic_prod);
+
+        thread::spawn(move || audio_loop(cons, shutdown_rx, app_for_thread, cfg, mic_cons));
 
         Self {
             control: Mutex::new(prod),
             shutdown: shutdown_tx,
             app,
+            mic,
         }
+    }
+
+    /// Switch the mic input device by name (re-opens on the mic thread).
+    pub fn set_input_device(&self, name: String) -> Result<(), String> {
+        self.mic.set_device(name)
     }
 
     /// Hand the engine an AppHandle so its thread can emit `error`/`levels`.
@@ -106,8 +119,9 @@ fn audio_loop(
     shutdown: mpsc::Receiver<()>,
     app: Arc<Mutex<Option<AppHandle>>>,
     cfg: StreamConfig,
+    mic_cons: rtrb::Consumer<[f32; 2]>,
 ) {
-    let stream = match build_output_stream(cons, app.clone(), cfg) {
+    let stream = match build_output_stream(cons, app.clone(), cfg, mic_cons) {
         Ok(s) => {
             let _ = s.play();
             s
@@ -151,6 +165,7 @@ fn build_output_stream(
     mut cons: rtrb::Consumer<Action>,
     app: Arc<Mutex<Option<AppHandle>>>,
     cfg: StreamConfig,
+    mut mic_cons: rtrb::Consumer<[f32; 2]>,
 ) -> Result<Stream, String> {
     let host = cpal::default_host();
     let device = host
@@ -186,7 +201,7 @@ fn build_output_stream(
                 let sends = sends_for(source_mode);
                 for frame in out.chunks_mut(channels.max(1)) {
                     let deck_frame = deck.next_frame();
-                    let mic_frame = [0.0f32, 0.0]; // P1.3 plugs real mic input
+                    let mic_frame = mic_cons.pop().unwrap_or([0.0, 0.0]);
                     let mon = mix_bus(
                         &[deck_frame, mic_frame],
                         &[sends.decks_monitor, sends.mic_monitor],

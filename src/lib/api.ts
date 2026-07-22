@@ -13,6 +13,20 @@ export interface PlaylistSnapshot {
   current: number | null;
 }
 
+export type SourceMode = 'file' | 'mic' | 'both';
+
+export interface DeviceInfo {
+  id: string;
+  name: string;
+  channels: number;
+  default_sample_rate: number;
+}
+
+export interface LevelMeter {
+  monitor: [number, number];
+  broadcast: [number, number];
+}
+
 export const AUDIO_EXTS = ['wav', 'mp3', 'flac', 'ogg', 'oga', 'm4a', 'aac'];
 
 export const isAudio = (path: string) =>
@@ -24,6 +38,13 @@ export const addToPlaylist = (paths: string[]) =>
   invoke<Track[]>('add_to_playlist', { paths });
 
 export const listPlaylist = () => invoke<PlaylistSnapshot>('list_playlist');
+
+export const listInputDevices = () => invoke<DeviceInfo[]>('list_input_devices');
+export const listOutputDevices = () => invoke<DeviceInfo[]>('list_output_devices');
+export const setInputDevice = (name: string) =>
+  invoke<void>('set_input_device', { name });
+export const setSourceMode = (mode: SourceMode) =>
+  invoke<void>('set_source_mode', { mode });
 
 export const playIndex = (i: number) => invoke<void>('play_index', { i });
 export const play = () => invoke<void>('play');

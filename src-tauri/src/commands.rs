@@ -9,6 +9,7 @@ use lofty::probe::Probe;
 use lofty::tag::Accessor;
 use rayon::prelude::*;
 
+use crate::engine::device;
 use crate::engine::engine::AudioEngine;
 use crate::engine::mixer::SourceMode;
 use crate::events;
@@ -179,4 +180,19 @@ pub fn seek(pct: f64, engine: State<'_, AudioEngine>) -> Result<(), String> {
 #[tauri::command]
 pub fn set_source_mode(mode: SourceMode, engine: State<'_, AudioEngine>) -> Result<(), String> {
     engine.set_source_mode(mode)
+}
+
+#[tauri::command]
+pub fn list_input_devices() -> Vec<device::DeviceInfo> {
+    device::list_input_devices()
+}
+
+#[tauri::command]
+pub fn list_output_devices() -> Vec<device::DeviceInfo> {
+    device::list_output_devices()
+}
+
+#[tauri::command]
+pub fn set_input_device(name: String, engine: State<'_, AudioEngine>) -> Result<(), String> {
+    engine.set_input_device(name)
 }
