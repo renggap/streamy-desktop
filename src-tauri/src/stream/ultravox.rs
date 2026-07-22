@@ -185,6 +185,25 @@ pub async fn send_mp3<R: AsyncWriteExt + Unpin>(s: &mut R, mp3: &[u8]) -> Result
         .map_err(|e| e.to_string())
 }
 
+/// Update now-playing (SONGTITLE) via the admin-free metadata message 0x3902.
+pub async fn send_metadata<R: AsyncWriteExt + Unpin>(s: &mut R, title: &str) -> Result<(), String> {
+    let esc = title
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
+    let xml = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?><metadata><TIT2>{esc}</TIT2></metadata>"
+    );
+    let mut payload = Vec::new();
+    payload.extend_from_slice(&1u16.to_be_bytes()); // MetadataID
+    payload.extend_from_slice(&1u16.to_be_bytes()); // Span
+    payload.extend_from_slice(&1u16.to_be_bytes()); // Index
+    payload.extend_from_slice(xml.as_bytes());
+    s.write_all(&encode_frame(0x3902, &payload))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

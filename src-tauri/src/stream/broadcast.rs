@@ -33,6 +33,7 @@ pub enum StreamStatus {
 pub struct BroadcastHandle {
     stop: Arc<AtomicBool>,
     streamer: JoinHandle<()>,
+    pub metadata_tx: mpsc::Sender<String>,
 }
 
 /// Connect Ultravox and run the encoder + streamer against `rx` (broadcast PCM).
@@ -55,6 +56,7 @@ pub async fn start(
 
     let stop = Arc::new(AtomicBool::new(false));
     let (mp3_tx, mut mp3_rx) = mpsc::channel::<Vec<u8>>(64);
+    let (metadata_tx, mut metadata_rx) = mpsc::channel::<String>(16);
 
     // Encoder thread: ring -> lame -> MP3 chunks (paced by realtime producer).
     let stop_enc = stop.clone();
@@ -95,23 +97,28 @@ pub async fn start(
         }
     });
 
-    // Streamer task: MP3 chunks -> Ultravox 0x7000 frames.
+    // Streamer task: MP3 chunks -> Ultravox 0x7000 frames; metadata on demand.
     let stop_str = stop.clone();
     let streamer = tokio::spawn(async move {
         loop {
             if stop_str.load(Ordering::Relaxed) {
                 break;
             }
-            match mp3_rx.recv().await {
-                Some(chunk) => {
-                    let _ = ultravox::send_mp3(&mut stream, &chunk).await;
+            tokio::select! {
+                chunk = mp3_rx.recv() => match chunk {
+                    Some(c) => { let _ = ultravox::send_mp3(&mut stream, &c).await; }
+                    None => break, // encoder thread dropped the sender
+                },
+                title = metadata_rx.recv() => {
+                    if let Some(t) = title {
+                        let _ = ultravox::send_metadata(&mut stream, &t).await;
+                    }
                 }
-                None => break, // encoder thread dropped the sender
             }
         }
     });
 
-    Ok(BroadcastHandle { stop, streamer })
+    Ok(BroadcastHandle { stop, streamer, metadata_tx })
 }
 
 fn push_chunks(tx: &mpsc::Sender<Vec<u8>>, mp3: &[u8]) {

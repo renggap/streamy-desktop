@@ -139,14 +139,24 @@ async fn broadcast_ring_drives_server_live() {
     let handle = broadcast::start(rx, uvox, enc_cfg, None)
         .await
         .expect("broadcast start");
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    // Push a now-playing title and verify the server picks it up.
+    handle
+        .metadata_tx
+        .send("Streamy Test Title".to_string())
+        .await
+        .expect("send metadata");
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let stats = http_get(&host, port, "/stats?sid=1").await;
     println!("--- broadcast /stats ---\n{stats}");
     let live = stats.contains("<STREAMSTATUS>1</STREAMSTATUS>");
-    println!("broadcast STREAMSTATUS live = {live}");
+    let title_ok = stats.contains("Streamy Test Title");
+    println!("broadcast STREAMSTATUS live = {live}; title_ok = {title_ok}");
 
     stop.store(true, Ordering::Relaxed);
     handle.stop().await;
     assert!(live, "server did not report the stream as live");
+    assert!(title_ok, "SONGTITLE not updated");
 }

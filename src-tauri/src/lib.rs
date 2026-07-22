@@ -38,6 +38,7 @@ pub fn run() {
             commands::delete_profile,
             commands::connect_stream,
             commands::disconnect_stream,
+            commands::set_stream_title,
         ])
         .manage(engine::engine::AudioEngine::new())
         .manage(std::sync::Mutex::new(

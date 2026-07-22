@@ -292,3 +292,19 @@ pub async fn disconnect_stream(
     let _ = app.emit(events::STREAM_STATUS, StreamStatus::Disconnected);
     Ok(())
 }
+
+#[tauri::command]
+pub async fn set_stream_title(
+    title: String,
+    bcast: State<'_, Mutex<Option<BroadcastHandle>>>,
+) -> Result<(), String> {
+    let tx = bcast
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .map(|h| h.metadata_tx.clone());
+    if let Some(tx) = tx {
+        tx.send(title).await.map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
