@@ -8,9 +8,8 @@ use lofty::probe::Probe;
 use lofty::tag::Accessor;
 use rayon::prelude::*;
 
-use crate::engine::decoder::decode_file;
 use crate::engine::engine::AudioEngine;
-use crate::engine::resample::resample_linear;
+use crate::engine::mixer::SourceMode;
 use crate::events;
 use crate::playlist::model::{Playlist, Track};
 
@@ -40,18 +39,10 @@ fn read_tags(path: &str) -> (String, String, f64) {
     }
 }
 
-/// Decode + load a track into the deck, start the stream, emit now_playing.
+/// Hand a track to the audio thread (streams from disk, starts in ms) and
+/// emit now_playing. Non-blocking — decode is incremental on the audio thread.
 fn play_at(engine: &AudioEngine, app: &AppHandle, track: &Track) -> Result<(), String> {
-    let (samples, sr, channels) = decode_file(&track.path)?;
-    // Resample decoded PCM to the output device's rate so pitch is preserved
-    // when the device's mix format differs from the file (e.g. 48000 vs 44100).
-    let samples = resample_linear(&samples, channels, sr, engine.out_rate());
-    let deck = engine.deck();
-    let mut d = deck.lock().map_err(|e| e.to_string())?;
-    d.load(samples, channels);
-    d.playing = true;
-    drop(d);
-    engine.start()?;
+    engine.load(track.path.clone())?;
     events::emit_now_playing(app, track)
 }
 
@@ -150,20 +141,21 @@ pub fn prev(
 }
 
 #[tauri::command]
+pub fn play(engine: State<'_, AudioEngine>) -> Result<(), String> {
+    engine.play()
+}
+
+#[tauri::command]
 pub fn pause(engine: State<'_, AudioEngine>) -> Result<(), String> {
-    let deck = engine.deck();
-    let mut d = deck.lock().map_err(|e| e.to_string())?;
-    d.playing = false;
-    Ok(())
+    engine.pause()
 }
 
 #[tauri::command]
 pub fn seek(pct: f64, engine: State<'_, AudioEngine>) -> Result<(), String> {
-    let deck = engine.deck();
-    let mut d = deck.lock().map_err(|e| e.to_string())?;
-    let c = d.channels.max(1);
-    let total = d.samples.len();
-    let pos = ((pct.clamp(0.0, 1.0)) * (total as f64)) as usize;
-    d.pos = (pos / c) * c; // align to frame boundary
-    Ok(())
+    engine.seek(pct)
+}
+
+#[tauri::command]
+pub fn set_source_mode(mode: SourceMode, engine: State<'_, AudioEngine>) -> Result<(), String> {
+    engine.set_source_mode(mode)
 }

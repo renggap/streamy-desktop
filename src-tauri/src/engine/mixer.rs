@@ -1,6 +1,8 @@
 // P1.1 + P1.4: pure mixer math + source-mode → bus sends.
 // Wired into the audio callback in P1.2.
 
+use serde::{Deserialize, Serialize};
+
 /// Sum N source frames into one bus, each scaled by its send gain.
 pub fn mix_bus(frames: &[[f32; 2]], sends: &[f32]) -> [f32; 2] {
     let mut l = 0.0f32;
@@ -13,7 +15,8 @@ pub fn mix_bus(frames: &[[f32; 2]], sends: &[f32]) -> [f32; 2] {
 }
 
 /// What the DJ picks as going to air. Drives broadcast vs. monitor sends.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum SourceMode {
     File,
     Mic,

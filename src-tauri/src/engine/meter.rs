@@ -1,5 +1,51 @@
 // P1.5: pure level-meter math. Wired into the audio callback in P1.2.
 
+use serde::{Deserialize, Serialize};
+
+/// One meter snapshot emitted on the `levels` event.
+/// `broadcast` stays zero until the encoder lands in P2.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct LevelMeter {
+    pub monitor: [f32; 2],
+    pub broadcast: [f32; 2],
+}
+
+/// Realtime meter accumulator: running per-channel peak since the last emit,
+/// emitted ~30 fps. No allocation in the audio callback.
+pub struct Meter {
+    acc_mon: [f32; 2],
+    frames: usize,
+    emit_every: usize,
+}
+
+impl Meter {
+    pub fn new(sample_rate: u32) -> Self {
+        Self {
+            acc_mon: [0.0, 0.0],
+            frames: 0,
+            emit_every: ((sample_rate as f64 / 30.0).round() as usize).max(1),
+        }
+    }
+    pub fn push(&mut self, mon: [f32; 2]) {
+        self.acc_mon[0] = self.acc_mon[0].max(mon[0].abs());
+        self.acc_mon[1] = self.acc_mon[1].max(mon[1].abs());
+        self.frames += 1;
+    }
+    pub fn take(&mut self) -> Option<LevelMeter> {
+        if self.frames >= self.emit_every {
+            let m = self.acc_mon;
+            self.acc_mon = [0.0, 0.0];
+            self.frames = 0;
+            Some(LevelMeter {
+                monitor: m,
+                broadcast: [0.0, 0.0],
+            })
+        } else {
+            None
+        }
+    }
+}
+
 /// Per-channel peak (max |sample|) over a window of stereo frames.
 pub fn peak(frames: &[[f32; 2]]) -> [f32; 2] {
     let mut mx = [0.0f32; 2];

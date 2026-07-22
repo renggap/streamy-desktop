@@ -4,96 +4,88 @@ use std::thread;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{BufferSize, SampleRate, Stream, StreamConfig};
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 use super::deck::Deck;
+use super::meter::Meter;
+use super::mixer::{mix_bus, sends_for, SourceMode};
 use crate::events;
 
 const FALLBACK_RATE: u32 = 44100;
 
-/// Commands sent from the UI thread to the dedicated audio thread.
-enum AudioCmd {
-    /// Build + play the output stream (idempotent).
-    Start,
-    /// Drop the stream and exit the audio thread.
-    Shutdown,
+/// Control messages pushed from the UI thread and drained at the top of each
+/// audio callback. Deck state lives entirely on the audio (cpal render) thread,
+/// so the callback is lock-free except for this lock-free queue.
+pub enum Action {
+    Load(String),
+    Play,
+    Pause,
+    Seek(f64),
+    SourceMode(SourceMode),
 }
 
-/// Send + `Sync` handle to the audio backend.
-///
-/// The cpal `Stream` is `!Send` on ALSA/WASAPI, so it lives entirely on a
-/// dedicated audio thread; the UI thread only holds this handle and the shared
-/// Deck. The stream is built at the **device's default config** (not a hardcoded
-/// rate) so it isn't rejected by the device's shared-mode mix format.
+/// Send + `Sync` handle to the audio backend. Owns a control-queue producer;
+/// the `!Send` cpal `Stream` lives on a dedicated thread.
 pub struct AudioEngine {
-    deck: Arc<Mutex<Deck>>,
-    tx: mpsc::Sender<AudioCmd>,
-    out_rate: u32,
-    #[allow(dead_code)]
-    out_channels: u16,
+    control: Mutex<rtrb::Producer<Action>>,
+    shutdown: mpsc::Sender<()>,
     app: Arc<Mutex<Option<AppHandle>>>,
 }
 
 impl AudioEngine {
     pub fn new() -> Self {
-        let deck = Arc::new(Mutex::new(Deck::new()));
-        let (tx, rx) = mpsc::channel::<AudioCmd>();
-        let app: Arc<Mutex<Option<AppHandle>>> = Arc::new(Mutex::new(None));
-
-        // Query the device's preferred output config up front so we (a) build a
-        // supported stream and (b) know the rate to resample decoded PCM to.
         let host = cpal::default_host();
-        let (out_rate, out_channels, stream_cfg) =
-            match host.default_output_device().and_then(|d| d.default_output_config().ok()) {
-                Some(c) => {
-                    let rate = c.sample_rate().0;
-                    let ch = c.channels();
-                    let cfg: StreamConfig = c.into();
-                    (rate, ch, cfg)
-                }
-                None => (
-                    FALLBACK_RATE,
-                    2,
-                    StreamConfig {
-                        channels: 2,
-                        sample_rate: SampleRate(FALLBACK_RATE),
-                        buffer_size: BufferSize::Default,
-                    },
-                ),
-            };
+        let cfg = match host
+            .default_output_device()
+            .and_then(|d| d.default_output_config().ok())
+        {
+            Some(c) => StreamConfig::from(c),
+            None => StreamConfig {
+                channels: 2,
+                sample_rate: SampleRate(FALLBACK_RATE),
+                buffer_size: BufferSize::Default,
+            },
+        };
 
-        let deck_for_thread = deck.clone();
+        let (prod, cons) = rtrb::RingBuffer::<Action>::new(64);
+        let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>();
+        let app: Arc<Mutex<Option<AppHandle>>> = Arc::new(Mutex::new(None));
         let app_for_thread = app.clone();
-        thread::spawn(move || audio_loop(deck_for_thread, rx, app_for_thread, stream_cfg));
+
+        thread::spawn(move || audio_loop(cons, shutdown_rx, app_for_thread, cfg));
 
         Self {
-            deck,
-            tx,
-            out_rate,
-            out_channels,
+            control: Mutex::new(prod),
+            shutdown: shutdown_tx,
             app,
         }
     }
 
-    pub fn deck(&self) -> Arc<Mutex<Deck>> {
-        self.deck.clone()
-    }
-
-    /// Output sample rate decoded PCM should be resampled to before loading.
-    pub fn out_rate(&self) -> u32 {
-        self.out_rate
-    }
-
-    /// Hand the engine an AppHandle so its thread can emit `error` events.
+    /// Hand the engine an AppHandle so its thread can emit `error`/`levels`.
     pub fn set_app(&self, handle: AppHandle) {
         if let Ok(mut slot) = self.app.lock() {
             *slot = Some(handle);
         }
     }
 
-    /// Start the output stream (builds + plays on the audio thread).
-    pub fn start(&self) -> Result<(), String> {
-        self.tx.send(AudioCmd::Start).map_err(|e| e.to_string())
+    fn push(&self, a: Action) -> Result<(), String> {
+        let mut p = self.control.lock().map_err(|e| e.to_string())?;
+        p.push(a).map_err(|_| "audio control queue full".to_string())
+    }
+    pub fn load(&self, path: String) -> Result<(), String> {
+        self.push(Action::Load(path))
+    }
+    pub fn play(&self) -> Result<(), String> {
+        self.push(Action::Play)
+    }
+    pub fn pause(&self) -> Result<(), String> {
+        self.push(Action::Pause)
+    }
+    pub fn seek(&self, pct: f64) -> Result<(), String> {
+        self.push(Action::Seek(pct))
+    }
+    pub fn set_source_mode(&self, m: SourceMode) -> Result<(), String> {
+        self.push(Action::SourceMode(m))
     }
 }
 
@@ -105,31 +97,30 @@ impl Default for AudioEngine {
 
 impl Drop for AudioEngine {
     fn drop(&mut self) {
-        let _ = self.tx.send(AudioCmd::Shutdown);
+        let _ = self.shutdown.send(());
     }
 }
 
 fn audio_loop(
-    deck: Arc<Mutex<Deck>>,
-    rx: mpsc::Receiver<AudioCmd>,
+    cons: rtrb::Consumer<Action>,
+    shutdown: mpsc::Receiver<()>,
     app: Arc<Mutex<Option<AppHandle>>>,
     cfg: StreamConfig,
 ) {
-    let mut stream: Option<Stream> = None;
-    while let Ok(cmd) = rx.recv() {
-        match cmd {
-            AudioCmd::Start if stream.is_none() => match build_output_stream(deck.clone(), &cfg, app.clone()) {
-                Ok(s) => stream = Some(s),
-                Err(e) => emit_err(&app, format!("audio start failed: {e}")),
-            },
-            AudioCmd::Start => {
-                if let Some(s) = stream.as_ref() {
-                    let _ = s.play();
-                }
-            }
-            AudioCmd::Shutdown => break,
+    let stream = match build_output_stream(cons, app.clone(), cfg) {
+        Ok(s) => {
+            let _ = s.play();
+            s
         }
-    }
+        Err(e) => {
+            emit_err(&app, format!("audio start failed: {e}"));
+            let _ = shutdown.recv();
+            return;
+        }
+    };
+    // Hold the stream alive until shutdown.
+    let _ = shutdown.recv();
+    drop(stream);
 }
 
 fn emit_err(app: &Arc<Mutex<Option<AppHandle>>>, msg: String) {
@@ -142,15 +133,13 @@ fn emit_err(app: &Arc<Mutex<Option<AppHandle>>>, msg: String) {
 }
 
 /// Write a stereo frame into an N-channel output slice.
-fn write_frame(buf: &mut [f32], channels: usize, l: f32, r: f32) {
-    match channels {
+fn write_frame(buf: &mut [f32], l: f32, r: f32) {
+    match buf.len() {
         0 => {}
         1 => buf[0] = 0.5 * (l + r),
         n => {
             buf[0] = l;
-            if n > 1 {
-                buf[1] = r;
-            }
+            buf[1] = r;
             for s in buf.iter_mut().take(n).skip(2) {
                 *s = 0.0;
             }
@@ -159,35 +148,63 @@ fn write_frame(buf: &mut [f32], channels: usize, l: f32, r: f32) {
 }
 
 fn build_output_stream(
-    deck: Arc<Mutex<Deck>>,
-    cfg: &StreamConfig,
+    mut cons: rtrb::Consumer<Action>,
     app: Arc<Mutex<Option<AppHandle>>>,
+    cfg: StreamConfig,
 ) -> Result<Stream, String> {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
         .ok_or_else(|| "no default output device".to_string())?;
     let channels = cfg.channels as usize;
+    let device_rate = cfg.sample_rate.0;
+
+    let mut deck = Deck::new();
+    let mut meter = Meter::new(device_rate);
+    let mut source_mode = SourceMode::File;
+    let app_for_err = app.clone();
 
     let stream = device
         .build_output_stream(
-            cfg,
+            &cfg,
             move |out: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                let mut d = match deck.lock() {
-                    Ok(g) => g,
-                    Err(_) => return,
-                };
+                // 1. Drain control queue (Load/Play/Pause/Seek/SourceMode).
+                while let Ok(action) = cons.pop() {
+                    match action {
+                        Action::Load(p) => match deck.open(&p, device_rate) {
+                            Ok(()) => deck.playing = true,
+                            Err(e) => emit_err(&app, format!("load failed: {e}")),
+                        },
+                        Action::Play => deck.playing = true,
+                        Action::Pause => deck.playing = false,
+                        Action::Seek(pct) => deck.seek(pct, device_rate),
+                        Action::SourceMode(m) => source_mode = m,
+                    }
+                }
+
+                // 2. Produce monitor frames (deck + mic[P1.3]) + meter.
+                let sends = sends_for(source_mode);
                 for frame in out.chunks_mut(channels.max(1)) {
-                    let [l, r] = d.next_frame();
-                    write_frame(frame, frame.len(), l, r);
+                    let deck_frame = deck.next_frame();
+                    let mic_frame = [0.0f32, 0.0]; // P1.3 plugs real mic input
+                    let mon = mix_bus(
+                        &[deck_frame, mic_frame],
+                        &[sends.decks_monitor, sends.mic_monitor],
+                    );
+                    meter.push(mon);
+                    write_frame(frame, mon[0], mon[1]);
+                }
+
+                // 3. Emit levels ~30 fps.
+                if let Some(levels) = meter.take() {
+                    if let Some(h) = app.lock().ok().and_then(|g| g.clone()) {
+                        let _ = h.emit(events::LEVELS, levels);
+                    }
                 }
             },
-            move |err: cpal::StreamError| {
-                emit_err(&app, format!("audio stream error: {err}"));
-            },
+            move |err: cpal::StreamError| emit_err(&app_for_err, format!("audio stream error: {err}")),
             None,
         )
         .map_err(|e| e.to_string())?;
-    stream.play().map_err(|e| e.to_string())?;
     Ok(stream)
 }

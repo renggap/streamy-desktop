@@ -18,10 +18,12 @@ pub fn run() {
             ping,
             commands::add_to_playlist,
             commands::play_index,
+            commands::play,
             commands::next,
             commands::prev,
             commands::pause,
             commands::seek,
+            commands::set_source_mode,
         ])
         .manage(engine::engine::AudioEngine::new())
         .manage(std::sync::Mutex::new(playlist::model::Playlist::new()))

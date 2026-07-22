@@ -1,49 +1,154 @@
-/// A single playback voice. Holds fully decoded interleaved PCM and a read
-/// position; the audio callback pulls one frame at a time via [`Deck::next_frame`].
+use symphonia::core::audio::SampleBuffer;
+use symphonia::core::codecs::Decoder;
+use symphonia::core::formats::{FormatReader, SeekMode, SeekTo};
+use symphonia::core::units::Time;
+
+use super::decoder;
+
+/// Streaming playback voice. Holds an open symphonia decoder and decodes ahead
+/// on demand. `next_frame` resamples to the output rate by reading at a
+/// fractional position (linear interpolation).
+///
+/// ponytail: linear interp is fine for the monitor; P2's broadcast path swaps
+/// in rubato. pcm grows to the whole file (same memory as P0); a sliding
+/// window trim is a later optimization.
 pub struct Deck {
-    pub samples: Vec<f32>, // interleaved stereo f32
-    pub channels: usize,
-    pub pos: usize, // sample index
+    format: Option<Box<dyn FormatReader>>,
+    decoder: Option<Box<dyn Decoder>>,
+    channels: usize,
+    pcm: Vec<f32>,
+    read_pos: f64,
+    step: f64,
+    total_secs: f64,
+    path: Option<String>,
     pub playing: bool,
+    ended: bool,
 }
 
 impl Deck {
     pub fn new() -> Self {
         Self {
-            samples: vec![],
+            format: None,
+            decoder: None,
             channels: 2,
-            pos: 0,
+            pcm: Vec::new(),
+            read_pos: 0.0,
+            step: 1.0,
+            total_secs: 0.0,
+            path: None,
             playing: false,
+            ended: false,
         }
     }
 
-    pub fn load(&mut self, samples: Vec<f32>, channels: usize) {
-        self.samples = samples;
-        self.channels = channels;
-        self.pos = 0;
+    /// Open a file for streaming at the output device's rate. Cheap; no decode.
+    /// Does not touch `playing` — caller decides.
+    pub fn open(&mut self, path: &str, device_rate: u32) -> Result<(), String> {
+        let o = decoder::open(path)?;
+        self.format = Some(o.format);
+        self.decoder = Some(o.decoder);
+        self.channels = o.channels.max(1);
+        self.step = if device_rate == 0 {
+            1.0
+        } else {
+            o.sample_rate as f64 / device_rate as f64
+        };
+        self.total_secs = o.total_secs;
+        self.path = Some(path.to_string());
+        self.pcm.clear();
+        self.read_pos = 0.0;
+        self.ended = false;
+        Ok(())
     }
 
-    /// Next stereo frame. Emits silence when stopped; up-mixes mono.
+    /// Seek to `pct` of the track. Reopens the file (cheap reset) then seeks.
+    pub fn seek(&mut self, pct: f64, device_rate: u32) {
+        let path = match self.path.clone() {
+            Some(p) => p,
+            None => return,
+        };
+        if self.open(&path, device_rate).is_err() {
+            return;
+        }
+        if let Some(format) = self.format.as_mut() {
+            let target = self.total_secs * pct.clamp(0.0, 1.0);
+            let to = SeekTo::Time {
+                time: Time::new(target.floor() as u64, target.fract()),
+                track_id: None,
+            };
+            let _ = format.seek(SeekMode::Accurate, to);
+        }
+        self.pcm.clear();
+        self.read_pos = 0.0;
+        self.ended = false;
+    }
+
+    /// Decode ahead until at least `read_pos + 2` frames are buffered.
+    fn refill(&mut self) {
+        let needed = (self.read_pos as usize) + 2;
+        while self.pcm.len() / self.channels <= needed {
+            if !self.next_packet() {
+                break;
+            }
+        }
+    }
+
+    fn next_packet(&mut self) -> bool {
+        let (format, decoder) = match (self.format.as_mut(), self.decoder.as_mut()) {
+            (Some(f), Some(d)) => (f, d),
+            _ => return false,
+        };
+        let packet = match format.next_packet() {
+            Ok(p) => p,
+            Err(_) => {
+                self.ended = true;
+                return false;
+            }
+        };
+        let decoded = match decoder.decode(&packet) {
+            Ok(d) => d,
+            Err(_) => return false,
+        };
+        let spec = *decoded.spec();
+        let nframes = decoded.capacity();
+        let mut sbuf = SampleBuffer::<f32>::new(nframes as u64, spec);
+        sbuf.copy_interleaved_ref(decoded);
+        self.pcm.extend_from_slice(sbuf.samples());
+        true
+    }
+
+    /// Next stereo frame at the output rate (resampled on read).
     pub fn next_frame(&mut self) -> [f32; 2] {
-        if !self.playing || self.channels == 0 {
+        if !self.playing || self.format.is_none() || self.channels == 0 {
             return [0.0, 0.0];
         }
+        self.refill();
         let c = self.channels;
+        let nframes = self.pcm.len() / c;
+        if nframes == 0 {
+            return [0.0, 0.0];
+        }
+        let p = self.read_pos;
+        let i0 = (p as usize).min(nframes - 1);
+        let i1 = (i0 + 1).min(nframes - 1);
+        let frac = (p - i0 as f64) as f32;
         let frame = match c {
-            2 => [
-                self.samples.get(self.pos).copied().unwrap_or(0.0),
-                self.samples.get(self.pos + 1).copied().unwrap_or(0.0),
-            ],
             1 => {
-                let m = self.samples.get(self.pos).copied().unwrap_or(0.0);
+                let s0 = self.pcm[i0];
+                let s1 = self.pcm[i1];
+                let m = s0 + (s1 - s0) * frac;
                 [m, m]
             }
-            _ => [0.0, 0.0],
+            _ => {
+                let l = self.pcm[i0 * 2] + (self.pcm[i1 * 2] - self.pcm[i0 * 2]) * frac;
+                let r = self.pcm[i0 * 2 + 1] + (self.pcm[i1 * 2 + 1] - self.pcm[i0 * 2 + 1]) * frac;
+                [l, r]
+            }
         };
-        self.pos += c;
-        if self.pos + c > self.samples.len() {
+        self.read_pos += self.step;
+        if self.read_pos >= nframes as f64 && self.ended {
             self.playing = false;
-            self.pos = 0;
+            self.read_pos = 0.0;
         }
         frame
     }
