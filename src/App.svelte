@@ -17,6 +17,9 @@
     position,
     view,
     selectedInput,
+    recording,
+    recordingPath,
+    recStartedAt,
   } from './lib/stores';
   import {
     next,
@@ -30,13 +33,14 @@
     getSettings,
   } from './lib/api';
   import type { LevelMeter, Track } from './lib/api';
-  import type { Position, StreamStatus } from './lib/stores';
+  import type { Position, RecordingStatus, StreamStatus } from './lib/stores';
   import NowPlaying from './lib/components/NowPlaying.svelte';
   import Playlist from './lib/components/Playlist.svelte';
   import SourceToggle from './lib/components/SourceToggle.svelte';
   import Meters from './lib/components/Meters.svelte';
   import DeviceChoosers from './lib/components/DeviceChoosers.svelte';
   import BroadcastBar from './lib/components/BroadcastBar.svelte';
+  import RecordBar from './lib/components/RecordBar.svelte';
   import ProfileManager from './lib/components/ProfileManager.svelte';
   import BottomNav from './lib/components/BottomNav.svelte';
 
@@ -71,6 +75,19 @@
     const lvl = listen<LevelMeter>('levels', (e) => levels.set(e.payload));
     const pos = listen<Position>('position', (e) => position.set(e.payload));
     const status = listen<StreamStatus>('stream_status', (e) => streamStatus.set(e.payload));
+    const rec = listen<RecordingStatus>('recording_status', (e) => {
+      const s = e.payload;
+      if (s.state === 'recording') {
+        recording.set(true);
+        recordingPath.set(s.path ?? null);
+        recStartedAt.set(Date.now());
+      } else {
+        recording.set(false);
+        recStartedAt.set(null);
+        if (s.state === 'stopped') recordingPath.set(s.path ?? null);
+        if (s.state === 'error') errorMsg.set(`Recording error: ${s.message ?? 'unknown'}`);
+      }
+    });
     const err = listen<string>('error', (e) => errorMsg.set(e.payload));
 
     const dd = getCurrentWebview().onDragDropEvent((e) => {
@@ -86,6 +103,7 @@
       lvl.then((u) => u());
       pos.then((u) => u());
       status.then((u) => u());
+      rec.then((u) => u());
       err.then((u) => u());
       dd.then((u) => u());
     };
@@ -110,6 +128,7 @@
     {:else if $view === 'stream'}
       <div class="space-y-4 p-4">
         <BroadcastBar />
+        <RecordBar />
         <div class="border-t border-zinc-800 pt-3">
           <h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Source</h3>
           <SourceToggle />

@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use lofty::config::ParseOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
@@ -17,6 +17,7 @@ use crate::encode::EncoderConfig;
 use crate::events;
 use crate::playlist::model::{Playlist, Track};
 use crate::profile::store::{ConnectionProfile, ProfileStore};
+use crate::record::{RecFormat, RecorderHandle, RecordingStatus};
 use crate::settings::{Settings, SettingsStore};
 use crate::stream::broadcast::{self, BroadcastHandle, StreamStatus};
 use crate::stream::ultravox::UltravoxConfig;
@@ -322,4 +323,108 @@ pub async fn set_stream_title(
         tx.send(title).await.map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+// --- P3 recording ---
+
+pub struct RecSlot {
+    handle: RecorderHandle,
+    path: String,
+}
+
+#[tauri::command]
+pub async fn start_recording(
+    format: RecFormat,
+    engine: State<'_, AudioEngine>,
+    rec: State<'_, Mutex<Option<RecSlot>>>,
+    app: AppHandle,
+) -> Result<String, String> {
+    {
+        let g = rec.lock().map_err(|e| e.to_string())?;
+        if g.is_some() {
+            return Err("already recording".into());
+        }
+    }
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let rec_dir = data_dir.join("recordings");
+    std::fs::create_dir_all(&rec_dir).map_err(|e| e.to_string())?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let ext = match format {
+        RecFormat::Mp3 => "mp3",
+        RecFormat::Wav => "wav",
+    };
+    let path = rec_dir.join(format!("streamy-{stamp}.{ext}"));
+    let path_str = path.to_string_lossy().into_owned();
+    diag::log(format!("start_recording -> {format:?} {path_str}"));
+
+    let rate = engine.output_rate();
+    let enc_cfg = EncoderConfig {
+        sample_rate: rate,
+        channels: 2,
+        bitrate_kbps: 192,
+    };
+    let (tx, rx) = rtrb::RingBuffer::<[f32; 2]>::new(16384);
+    engine.set_record_producer(Some(tx));
+
+    // Surface disk-full / write errors immediately via the event.
+    let app_for_err = app.clone();
+    let on_error: Box<dyn FnOnce(String) + Send> = Box::new(move |msg| {
+        diag::log(format!("recording error: {msg}"));
+        let _ = app_for_err.emit(
+            events::RECORDING_STATUS,
+            RecordingStatus::Error { message: msg },
+        );
+    });
+
+    match crate::record::start_file(rx, format, enc_cfg, rate, &path_str, Some(on_error)) {
+        Ok(h) => {
+            if let Ok(mut g) = rec.lock() {
+                *g = Some(RecSlot {
+                    handle: h,
+                    path: path_str.clone(),
+                });
+            }
+            let _ = app.emit(
+                events::RECORDING_STATUS,
+                RecordingStatus::Recording {
+                    path: path_str.clone(),
+                },
+            );
+            Ok(path_str)
+        }
+        Err(e) => {
+            engine.set_record_producer(None);
+            Err(e)
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn stop_recording(
+    engine: State<'_, AudioEngine>,
+    rec: State<'_, Mutex<Option<RecSlot>>>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let slot = rec.lock().map_err(|e| e.to_string())?.take();
+    engine.set_record_producer(None);
+    let Some(slot) = slot else {
+        return Ok(()); // not recording — no-op
+    };
+    let path = slot.path.clone();
+    match slot.handle.stop() {
+        Ok(()) => {
+            let _ = app.emit(
+                events::RECORDING_STATUS,
+                RecordingStatus::Stopped { path },
+            );
+            Ok(())
+        }
+        Err(e) => {
+            // Error event already emitted by the recorder thread's on_error hook.
+            Err(e)
+        }
+    }
 }

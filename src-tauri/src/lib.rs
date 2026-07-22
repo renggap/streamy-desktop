@@ -5,6 +5,7 @@ pub mod engine;
 pub mod events;
 pub mod playlist;
 pub mod profile;
+pub mod record;
 pub mod settings;
 pub mod stream;
 
@@ -42,12 +43,17 @@ pub fn run() {
             commands::connect_stream,
             commands::disconnect_stream,
             commands::set_stream_title,
+            commands::start_recording,
+            commands::stop_recording,
         ])
         .manage(engine::engine::AudioEngine::new())
         .manage(std::sync::Mutex::new(
             None::<stream::broadcast::BroadcastHandle>,
         ))
         .manage(std::sync::Mutex::new(playlist::model::Playlist::new()))
+        .manage(std::sync::Mutex::new(
+            None::<commands::RecSlot>,
+        ))
         .setup(|app| {
             // Diagnostics log + devtools (debug only).
             let data_dir = app.path().app_data_dir()?;

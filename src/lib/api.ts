@@ -77,6 +77,10 @@ export const disconnectStream = () => invoke<void>('disconnect_stream');
 export const setStreamTitle = (title: string) =>
   invoke<void>('set_stream_title', { title });
 
+export const startRecording = (format: 'mp3' | 'wav') =>
+  invoke<string>('start_recording', { format });
+export const stopRecording = () => invoke<void>('stop_recording');
+
 export const playIndex = (i: number) => invoke<void>('play_index', { i });
 export const play = () => invoke<void>('play');
 export const next = () => invoke<void>('next');

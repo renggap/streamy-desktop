@@ -22,6 +22,19 @@ export interface StreamStatus {
   message?: string;
 }
 
+export type RecFormat = 'mp3' | 'wav';
+export const recFormat = writable<RecFormat>('mp3');
+export const recording = writable(false);
+export const recordingPath = writable<string | null>(null);
+/** Epoch-ms when the current take started (for the elapsed indicator). */
+export const recStartedAt = writable<number | null>(null);
+
+export interface RecordingStatus {
+  state: 'recording' | 'stopped' | 'error';
+  path?: string;
+  message?: string;
+}
+
 export type View = 'home' | 'stream' | 'settings';
 export const view = writable<View>('home');
 

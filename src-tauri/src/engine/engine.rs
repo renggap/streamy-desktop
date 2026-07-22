@@ -43,6 +43,9 @@ struct EngineState {
     /// When broadcasting, the callback pushes the broadcast bus into this ring
     /// for the encoder thread to consume.
     broadcast_tx: Option<rtrb::Producer<[f32; 2]>>,
+    /// When recording, the callback taps the same broadcast mix into this ring
+    /// for the recorder thread. Independent of `broadcast_tx` (record-only works).
+    record_tx: Option<rtrb::Producer<[f32; 2]>>,
 }
 
 /// Send + `Sync` handle to the audio backend.
@@ -70,6 +73,7 @@ impl AudioEngine {
             cons,
             mic_cons,
             broadcast_tx: None,
+            record_tx: None,
         }));
 
         let app_for_thread = app.clone();
@@ -124,6 +128,13 @@ impl AudioEngine {
     pub fn set_broadcast_producer(&self, tx: Option<rtrb::Producer<[f32; 2]>>) {
         if let Ok(mut s) = self.state.lock() {
             s.broadcast_tx = tx;
+        }
+    }
+
+    /// Install/remove the record-bus producer (PCM tap of the broadcast mix).
+    pub fn set_record_producer(&self, tx: Option<rtrb::Producer<[f32; 2]>>) {
+        if let Ok(mut s) = self.state.lock() {
+            s.record_tx = tx;
         }
     }
 
@@ -266,6 +277,9 @@ fn build_output_stream(
                             &[sends.decks_broadcast, sends.mic_broadcast],
                         );
                         if let Some(tx) = s.broadcast_tx.as_mut() {
+                            let _ = tx.push(bcast);
+                        }
+                        if let Some(tx) = s.record_tx.as_mut() {
                             let _ = tx.push(bcast);
                         }
                         s.meter.push(mon, mic_frame);
