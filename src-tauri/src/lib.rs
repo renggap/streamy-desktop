@@ -16,7 +16,7 @@ pub fn run() {
             commands::play,
             commands::pause,
         ])
-        .manage(std::sync::Mutex::new(engine::engine::AudioEngine::new()))
+        .manage(engine::engine::AudioEngine::new())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
