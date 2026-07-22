@@ -25,14 +25,19 @@
   async function toggle() {
     if (connected) {
       await disconnectStream();
-    } else if (selected) {
-      try {
-        await connectStream(selected, $bitrate);
-      } catch (e) {
-        errorMsg.set(String(e));
-      }
-    } else {
-      view.set('settings'); // no profile -> go create one
+      return;
+    }
+    // Connect to the selected profile, or the first one if none is picked yet.
+    const name = selected || $profiles[0]?.name;
+    if (!name) {
+      view.set('settings'); // no profile at all -> go create one
+      return;
+    }
+    selected = name;
+    try {
+      await connectStream(name, $bitrate);
+    } catch (e) {
+      errorMsg.set(String(e));
     }
   }
 
