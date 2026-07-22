@@ -14,6 +14,7 @@ use crate::engine::engine::AudioEngine;
 use crate::engine::mixer::SourceMode;
 use crate::events;
 use crate::playlist::model::{Playlist, Track};
+use crate::profile::store::{ConnectionProfile, ProfileStore};
 
 /// Read (title, artist, duration_secs) from tags; fall back to filename + 0.
 /// Skips cover-art parsing (we don't display it) — the expensive part on files
@@ -195,4 +196,25 @@ pub fn list_output_devices() -> Vec<device::DeviceInfo> {
 #[tauri::command]
 pub fn set_input_device(name: String, engine: State<'_, AudioEngine>) -> Result<(), String> {
     engine.set_input_device(name)
+}
+
+// --- P2.4/2.5 connection profiles ---
+
+#[tauri::command]
+pub fn list_profiles(store: State<'_, ProfileStore>) -> Vec<ConnectionProfile> {
+    store.list()
+}
+
+#[tauri::command]
+pub fn save_profile(
+    profile: ConnectionProfile,
+    password: String,
+    store: State<'_, ProfileStore>,
+) -> Result<(), String> {
+    store.save(profile, password)
+}
+
+#[tauri::command]
+pub fn delete_profile(name: String, store: State<'_, ProfileStore>) -> Result<(), String> {
+    store.delete(&name)
 }
