@@ -50,6 +50,7 @@ pub fn run() {
             commands::set_stream_title,
             commands::start_recording,
             commands::stop_recording,
+            commands::repair_webview2,
         ])
         .manage(engine::engine::AudioEngine::new())
         .manage(std::sync::Mutex::new(

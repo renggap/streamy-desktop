@@ -23,6 +23,7 @@
     recording,
     recordingPath,
     recStartedAt,
+    wv2Progress,
   } from './lib/stores';
   import {
     next,
@@ -47,6 +48,8 @@
   import Mixer from './lib/components/Mixer.svelte';
   import ProfileManager from './lib/components/ProfileManager.svelte';
   import RecordingSettings from './lib/components/RecordingSettings.svelte';
+  import WebView2Repair from './lib/components/WebView2Repair.svelte';
+  import WelcomeModal from './lib/components/WelcomeModal.svelte';
   import BottomNav from './lib/components/BottomNav.svelte';
 
   onMount(() => {
@@ -97,6 +100,9 @@
       }
     });
     const err = listen<string>('error', (e) => errorMsg.set(e.payload));
+    const wv2 = listen<{ downloaded: number; total: number | null }>('webview2_progress', (e) =>
+      wv2Progress.set(e.payload),
+    );
 
     const dd = getCurrentWebview().onDragDropEvent((e) => {
       if (e.payload.type === 'drop') {
@@ -113,12 +119,14 @@
       status.then((u) => u());
       rec.then((u) => u());
       err.then((u) => u());
+      wv2.then((u) => u());
       dd.then((u) => u());
     };
   });
 </script>
 
 <main class="flex h-screen flex-col bg-zinc-950 text-zinc-200">
+  <WelcomeModal />
   {#if $errorMsg}
     <div
       class="flex items-start gap-2 border-b border-red-900 bg-red-950/60 px-4 py-2 text-sm text-red-200"
@@ -170,6 +178,14 @@
             Connection profiles
           </h3>
           <ProfileManager />
+        </div>
+        <div class="retro-chrome rounded-lg p-4">
+          <h3 class="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Runtime</h3>
+          <p class="mb-3 text-[11px] text-zinc-500">
+            WebView2 is auto-installed with Streamy on supported Windows. Run repair if the app ever
+            fails to start with a WebView2 message.
+          </p>
+          <WebView2Repair />
         </div>
       </div>
     {/if}

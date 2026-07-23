@@ -473,3 +473,53 @@ pub async fn stop_recording(
         }
     }
 }
+
+// --- WebView2 runtime repair (in-app, with progress) ---
+
+const WV2_BOOTSTRAPPER_URL: &str = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
+
+#[derive(Serialize, Clone)]
+struct Wv2Progress {
+    downloaded: u64,
+    total: Option<u64>,
+}
+
+/// Download the official WebView2 bootstrapper (small, ~2 MB) with live progress
+/// events, then run it so Microsoft's installer can install/repair the runtime.
+/// The installer runs with its own UI (and UAC) so the user sees the runtime
+/// download/install progress.
+#[tauri::command]
+pub async fn repair_webview2(app: AppHandle) -> Result<String, String> {
+    diag::log("repair_webview2 -> downloading bootstrapper".to_string());
+    let resp = reqwest::get(WV2_BOOTSTRAPPER_URL)
+        .await
+        .map_err(|e| format!("download failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("download failed: {e}"))?;
+    let total = resp.content_length();
+    let mut resp = resp;
+
+    let mut buf: Vec<u8> = Vec::new();
+    let mut downloaded: u64 = 0;
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| format!("download failed: {e}"))?
+    {
+        buf.extend_from_slice(&chunk);
+        downloaded += chunk.len() as u64;
+        let _ = app.emit(
+            events::WEBVIEW2_PROGRESS,
+            Wv2Progress { downloaded, total },
+        );
+    }
+
+    let out = std::env::temp_dir().join("streamy-webview2-setup.exe");
+    std::fs::write(&out, &buf).map_err(|e| e.to_string())?;
+    std::process::Command::new(&out)
+        .spawn()
+        .map_err(|e| format!("failed to launch installer: {e}"))?;
+    let path = out.to_string_lossy().into_owned();
+    diag::log(format!("repair_webview2 -> launched {path}"));
+    Ok(path)
+}

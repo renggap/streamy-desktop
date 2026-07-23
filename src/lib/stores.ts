@@ -16,6 +16,14 @@ export const recDir = writable<string | null>(null);
 export const streamTitle = writable<string>('');
 export const sourceMode = writable<SourceMode>('file');
 
+// WebView2 runtime repair (in-app interstitial).
+export type Wv2State = 'idle' | 'downloading' | 'launching' | 'done' | 'err';
+export const wv2State = writable<Wv2State>('idle');
+export const wv2Progress = writable<{ downloaded: number; total: number | null }>({
+  downloaded: 0,
+  total: null,
+});
+
 // P5 mixer state.
 export const crossfade = writable(0); // 0=A .. 1=B
 export const eqLow = writable(0);

@@ -9,6 +9,7 @@ pub const TRACK_ENDED: &str = "track_ended";
 pub const STREAM_STATUS: &str = "stream_status";
 pub const POSITION: &str = "position";
 pub const RECORDING_STATUS: &str = "recording_status";
+pub const WEBVIEW2_PROGRESS: &str = "webview2_progress";
 
 pub fn emit_now_playing(app: &AppHandle, track: &Track) -> Result<(), String> {
     app.emit(NOW_PLAYING, track).map_err(|e| e.to_string())
