@@ -17,6 +17,9 @@
     position,
     view,
     selectedInput,
+    selectedOutput,
+    recDir,
+    streamTitle,
     recording,
     recordingPath,
     recStartedAt,
@@ -43,6 +46,7 @@
   import RecordBar from './lib/components/RecordBar.svelte';
   import Mixer from './lib/components/Mixer.svelte';
   import ProfileManager from './lib/components/ProfileManager.svelte';
+  import RecordingSettings from './lib/components/RecordingSettings.svelte';
   import BottomNav from './lib/components/BottomNav.svelte';
 
   onMount(() => {
@@ -57,9 +61,11 @@
     listInputDevices().then(inputDevices.set);
     listOutputDevices().then(outputDevices.set);
     listProfiles().then(profiles.set);
-    // Restore the persisted mic choice for display (backend re-applies it too).
+    // Restore persisted device + recording-folder choices for display.
     getSettings().then((s) => {
       if (s.input_device) selectedInput.set(s.input_device);
+      if (s.output_device) selectedOutput.set(s.output_device);
+      if (s.recording_dir) recDir.set(s.recording_dir);
     });
 
     const np = listen<Track>('now_playing', (e) => {
@@ -67,6 +73,7 @@
       playing.set(true);
       const idx = get(playlist).findIndex((t) => t.path === e.payload.path);
       currentIndex.set(idx >= 0 ? idx : null);
+      streamTitle.set(e.payload.title);
       setStreamTitle(e.payload.title);
     });
     const ended = listen('track_ended', () => {
@@ -129,27 +136,39 @@
     {:else if $view === 'stream'}
       <div class="space-y-4 p-4">
         <BroadcastBar />
-        <RecordBar />
-        <div class="border-t border-zinc-800 pt-3">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Source</h3>
+        <div class="retro-chrome rounded-lg p-4">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Record</h3>
+          <RecordBar />
+        </div>
+        <div class="retro-chrome rounded-lg p-4">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Source</h3>
           <SourceToggle />
         </div>
-        <div class="border-t border-zinc-800 pt-3">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Levels</h3>
+        <div class="retro-chrome rounded-lg p-4">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Levels</h3>
           <Meters />
         </div>
-        <div class="border-t border-zinc-800 pt-3">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Mixer</h3>
+        <div class="retro-chrome rounded-lg p-4">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Mixer</h3>
           <Mixer />
         </div>
       </div>
     {:else}
-      <div class="space-y-5 p-4">
-        <div>
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Devices</h3>
+      <div class="space-y-4 p-4">
+        <div class="retro-chrome rounded-lg p-4">
+          <h3 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Devices</h3>
           <DeviceChoosers />
         </div>
-        <div class="border-t border-zinc-800 pt-3">
+        <div class="retro-chrome rounded-lg p-4">
+          <h3 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
+            Recording folder
+          </h3>
+          <RecordingSettings />
+        </div>
+        <div class="retro-chrome rounded-lg p-4">
+          <h3 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
+            Connection profiles
+          </h3>
           <ProfileManager />
         </div>
       </div>

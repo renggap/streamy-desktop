@@ -227,6 +227,25 @@ pub fn set_input_device(
 }
 
 #[tauri::command]
+pub fn set_output_device(
+    name: Option<String>,
+    engine: State<'_, AudioEngine>,
+    settings: State<'_, SettingsStore>,
+) -> Result<(), String> {
+    diag::log(format!("set_output_device -> '{name:?}'"));
+    settings.set_output_device(name.clone())?;
+    engine.set_output_device(name)
+}
+
+#[tauri::command]
+pub fn set_recording_dir(
+    dir: Option<String>,
+    settings: State<'_, SettingsStore>,
+) -> Result<(), String> {
+    settings.set_recording_dir(dir)
+}
+
+#[tauri::command]
 pub fn get_settings(settings: State<'_, SettingsStore>) -> Settings {
     settings.get()
 }
@@ -357,6 +376,7 @@ pub struct RecSlot {
 pub async fn start_recording(
     format: RecFormat,
     engine: State<'_, AudioEngine>,
+    settings: State<'_, SettingsStore>,
     rec: State<'_, Mutex<Option<RecSlot>>>,
     app: AppHandle,
 ) -> Result<String, String> {
@@ -366,8 +386,11 @@ pub async fn start_recording(
             return Err("already recording".into());
         }
     }
-    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let rec_dir = data_dir.join("recordings");
+    // Prefer the user-chosen recording folder; fall back to <app-data>/recordings.
+    let rec_dir = match settings.get().recording_dir {
+        Some(d) => std::path::PathBuf::from(d),
+        None => app.path().app_data_dir().map_err(|e| e.to_string())?.join("recordings"),
+    };
     std::fs::create_dir_all(&rec_dir).map_err(|e| e.to_string())?;
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

@@ -3,13 +3,16 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-/// Small persisted app settings (last-used input/output device names).
+/// Small persisted app settings (last-used input/output device names, recording dir).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default)]
     pub input_device: Option<String>,
     #[serde(default)]
     pub output_device: Option<String>,
+    /// Where recordings land; defaults to <app-data>/recordings when None.
+    #[serde(default)]
+    pub recording_dir: Option<String>,
 }
 
 pub struct SettingsStore {
@@ -37,6 +40,18 @@ impl SettingsStore {
     pub fn set_input_device(&self, name: String) -> Result<(), String> {
         let mut g = self.inner.lock().map_err(|e| e.to_string())?;
         g.input_device = Some(name);
+        self.persist(&g)
+    }
+
+    pub fn set_output_device(&self, name: Option<String>) -> Result<(), String> {
+        let mut g = self.inner.lock().map_err(|e| e.to_string())?;
+        g.output_device = name;
+        self.persist(&g)
+    }
+
+    pub fn set_recording_dir(&self, dir: Option<String>) -> Result<(), String> {
+        let mut g = self.inner.lock().map_err(|e| e.to_string())?;
+        g.recording_dir = dir;
         self.persist(&g)
     }
 

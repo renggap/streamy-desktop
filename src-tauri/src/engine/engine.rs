@@ -87,6 +87,8 @@ pub struct AudioEngine {
     app: Arc<Mutex<Option<AppHandle>>>,
     mic: MicInput,
     state: Arc<Mutex<EngineState>>,
+    /// Chosen output device name (None = system default). Drives stream rebuilds.
+    output_device: Arc<Mutex<Option<String>>>,
 }
 
 impl AudioEngine {
@@ -98,6 +100,7 @@ impl AudioEngine {
 
         let (sig_tx, sig_rx) = mpsc::channel::<Signal>();
         let app: Arc<Mutex<Option<AppHandle>>> = Arc::new(Mutex::new(None));
+        let output_device: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         let state = Arc::new(Mutex::new(EngineState {
             deck_a: Deck::new(),
             deck_b: Deck::new(),
@@ -122,8 +125,11 @@ impl AudioEngine {
 
         let app_for_thread = app.clone();
         let state_for_thread = state.clone();
+        let out_for_thread = output_device.clone();
         let sig_for_thread = sig_tx.clone();
-        thread::spawn(move || audio_loop(state_for_thread, app_for_thread, sig_for_thread, sig_rx));
+        thread::spawn(move || {
+            audio_loop(state_for_thread, app_for_thread, out_for_thread, sig_for_thread, sig_rx)
+        });
 
         Self {
             control: Mutex::new(prod),
@@ -131,6 +137,7 @@ impl AudioEngine {
             app,
             mic,
             state,
+            output_device,
         }
     }
 
@@ -170,6 +177,15 @@ impl AudioEngine {
     }
     pub fn set_input_device(&self, name: String) -> Result<(), String> {
         self.mic.set_device(name)
+    }
+
+    /// Target an output device by name (None = system default); rebuilds the stream.
+    pub fn set_output_device(&self, name: Option<String>) -> Result<(), String> {
+        if let Ok(mut g) = self.output_device.lock() {
+            *g = name;
+        }
+        let _ = self.sig.send(Signal::Rebuild);
+        Ok(())
     }
 
     /// Restore the OS default input (startup / when no saved device).
@@ -215,11 +231,13 @@ impl Drop for AudioEngine {
 fn audio_loop(
     state: Arc<Mutex<EngineState>>,
     app: Arc<Mutex<Option<AppHandle>>>,
+    output_device: Arc<Mutex<Option<String>>>,
     sig_tx: mpsc::Sender<Signal>,
     sig_rx: mpsc::Receiver<Signal>,
 ) {
     loop {
-        let cfg = current_output_cfg();
+        let wanted = output_device.lock().ok().and_then(|g| g.clone());
+        let cfg = current_output_cfg(&wanted);
         // Adapt meter window + deck resample step to this device's rate.
         if let Ok(mut s) = state.lock() {
             s.meter.set_sample_rate(cfg.sample_rate.0);
@@ -227,7 +245,7 @@ fn audio_loop(
             s.deck_b.set_device_rate(cfg.sample_rate.0);
             s.fade_step = 1.0 / (CROSSFADE_SECS * cfg.sample_rate.0 as f32);
         }
-        match build_output_stream(state.clone(), app.clone(), sig_tx.clone(), &cfg) {
+        match build_output_stream(state.clone(), app.clone(), sig_tx.clone(), &cfg, &wanted) {
             Ok(stream) => {
                 let _ = stream.play();
                 // Hold the stream until a rebuild (device lost) or shutdown.
@@ -244,10 +262,21 @@ fn audio_loop(
     }
 }
 
-fn current_output_cfg() -> StreamConfig {
+/// Pick the output device by name, falling back to the system default.
+fn pick_output_device(wanted: &Option<String>) -> Option<cpal::Device> {
     let host = cpal::default_host();
-    match host
-        .default_output_device()
+    if let Some(name) = wanted {
+        if let Ok(mut iter) = host.output_devices() {
+            if let Some(d) = iter.find(|dev| dev.name().ok().as_deref() == Some(name.as_str())) {
+                return Some(d);
+            }
+        }
+    }
+    host.default_output_device()
+}
+
+fn current_output_cfg(wanted: &Option<String>) -> StreamConfig {
+    match pick_output_device(wanted)
         .and_then(|d| d.default_output_config().ok())
     {
         Some(c) => StreamConfig::from(c),
@@ -288,11 +317,10 @@ fn build_output_stream(
     app: Arc<Mutex<Option<AppHandle>>>,
     sig_tx: mpsc::Sender<Signal>,
     cfg: &StreamConfig,
+    wanted: &Option<String>,
 ) -> Result<Stream, String> {
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or_else(|| "no default output device".to_string())?;
+    let device = pick_output_device(wanted)
+        .ok_or_else(|| "no output device".to_string())?;
     let channels = cfg.channels as usize;
     let device_rate = cfg.sample_rate.0;
 

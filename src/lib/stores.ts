@@ -11,6 +11,9 @@ export const levels = writable<LevelMeter>({ monitor: [0, 0], mic: [0, 0] });
 export const inputDevices = writable<DeviceInfo[]>([]);
 export const outputDevices = writable<DeviceInfo[]>([]);
 export const selectedInput = writable<string>('');
+export const selectedOutput = writable<string>('');
+export const recDir = writable<string | null>(null);
+export const streamTitle = writable<string>('');
 export const sourceMode = writable<SourceMode>('file');
 
 // P5 mixer state.

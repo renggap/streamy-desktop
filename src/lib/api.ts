@@ -43,8 +43,16 @@ export const listInputDevices = () => invoke<DeviceInfo[]>('list_input_devices')
 export const listOutputDevices = () => invoke<DeviceInfo[]>('list_output_devices');
 export const setInputDevice = (name: string) =>
   invoke<void>('set_input_device', { name });
+export const setOutputDevice = (name: string | null) =>
+  invoke<void>('set_output_device', { name });
+export const setRecordingDir = (dir: string | null) =>
+  invoke<void>('set_recording_dir', { dir });
 export const getSettings = () =>
-  invoke<{ input_device: string | null; output_device: string | null }>('get_settings');
+  invoke<{
+    input_device: string | null;
+    output_device: string | null;
+    recording_dir: string | null;
+  }>('get_settings');
 export const setSourceMode = (mode: SourceMode) =>
   invoke<void>('set_source_mode', { mode });
 export const setCrossfade = (pos: number) =>
@@ -104,4 +112,10 @@ export const openAudioFiles = async (): Promise<string[]> => {
   });
   if (!sel) return [];
   return Array.isArray(sel) ? sel : [sel];
+};
+
+/** Native folder picker; returns an absolute path or null if cancelled. */
+export const openFolder = async (): Promise<string | null> => {
+  const sel = await open({ directory: true, multiple: false });
+  return sel ? (Array.isArray(sel) ? sel[0] : sel) : null;
 };

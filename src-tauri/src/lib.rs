@@ -39,6 +39,8 @@ pub fn run() {
             commands::list_input_devices,
             commands::list_output_devices,
             commands::set_input_device,
+            commands::set_output_device,
+            commands::set_recording_dir,
             commands::get_settings,
             commands::list_profiles,
             commands::save_profile,
@@ -91,6 +93,16 @@ pub fn run() {
                 } else {
                     diag::log(format!("restored input device '{name}'"));
                 }
+            }
+            // Restore the last-used output device.
+            if let Some(name) = app
+                .state::<settings::SettingsStore>()
+                .get()
+                .output_device
+            {
+                let _ = app
+                    .state::<engine::engine::AudioEngine>()
+                    .set_output_device(Some(name));
             }
             if cfg!(debug_assertions) {
                 app.handle().plugin(
