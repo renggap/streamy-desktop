@@ -77,34 +77,34 @@
   </h3>
   <div class="grid grid-cols-2 gap-2 text-xs text-zinc-300">
     <label class="flex flex-col gap-1"
-      >Name <input class="rounded bg-zinc-800 px-2 py-1" bind:value={editing.name} disabled={isEditing} /></label
+      >Name <input class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.name} disabled={isEditing} /></label
     >
     <label class="flex flex-col gap-1"
-      >Stream ID <input type="number" class="rounded bg-zinc-800 px-2 py-1" bind:value={editing.stream_id} /></label
+      >Stream ID <input type="number" class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.stream_id} /></label
     >
     <label class="flex flex-col gap-1"
-      >Host <input class="rounded bg-zinc-800 px-2 py-1" bind:value={editing.host} /></label
+      >Host <input class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.host} /></label
     >
     <label class="flex flex-col gap-1"
-      >Port <input type="number" class="rounded bg-zinc-800 px-2 py-1" bind:value={editing.port} /></label
+      >Port <input type="number" class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.port} /></label
     >
     <label class="col-span-2 flex flex-col gap-1"
       >Password
       <input
         type="password"
-        class="rounded bg-zinc-800 px-2 py-1"
+        class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200"
         bind:value={password}
         placeholder={isEditing ? '(unchanged)' : ''}
       /></label
     >
     <label class="flex flex-col gap-1"
-      >Station name <input class="rounded bg-zinc-800 px-2 py-1" bind:value={editing.station_name} /></label
+      >Station name <input class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.station_name} /></label
     >
     <label class="flex flex-col gap-1"
-      >Genre <input class="rounded bg-zinc-800 px-2 py-1" bind:value={editing.genre} /></label
+      >Genre <input class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.genre} /></label
     >
     <label class="col-span-2 flex flex-col gap-1"
-      >URL <input class="rounded bg-zinc-800 px-2 py-1" bind:value={editing.url} /></label
+      >URL <input class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.url} /></label
     >
   </div>
   <div class="flex gap-2">
@@ -118,20 +118,37 @@
     {/if}
   </div>
 
-  <div class="border-t border-zinc-800 pt-2">
-    <div class="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-500">Saved</div>
-    {#each $profiles as p (p.name)}
-      <div class="flex items-center justify-between gap-2 py-1 text-xs">
-        <span class="truncate text-zinc-300"
-          >{p.name} <span class="text-zinc-500">{p.host}:{p.port}</span></span
+  <div class="border-t border-zinc-800 pt-3">
+    <div class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Saved</div>
+    <div class="space-y-2">
+      {#each $profiles as p (p.name)}
+        <div
+          class="retro-chrome flex items-center gap-3 rounded-lg px-3 py-2.5"
         >
-        <span class="flex shrink-0 gap-2">
-          <button class="text-cyan-400 hover:text-cyan-300" onclick={() => edit(p)}>Edit</button>
-          <button class="text-red-400 hover:text-red-300" onclick={() => remove(p.name)}>Delete</button>
-        </span>
-      </div>
-    {:else}
-      <div class="text-xs text-zinc-600">None yet — fill the form above.</div>
-    {/each}
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-emerald-600/30 to-cyan-600/30 text-base">📡</span>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="truncate text-sm font-medium text-zinc-100">{p.name}</span>
+              <span class="rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-400">{p.protocol}</span>
+            </div>
+            <div class="truncate text-[11px] text-zinc-500">{p.host}<span class="text-zinc-600">:{p.port}</span> · sid {p.stream_id}</div>
+          </div>
+          <div class="flex shrink-0 gap-1">
+            <button
+              class="rounded-md bg-zinc-800 px-2.5 py-1.5 text-[11px] font-medium text-cyan-300 hover:bg-zinc-700"
+              onclick={() => edit(p)}>Edit</button
+            >
+            <button
+              class="rounded-md bg-zinc-800 px-2.5 py-1.5 text-[11px] font-medium text-red-300 hover:bg-zinc-700"
+              onclick={() => remove(p.name)}>Delete</button
+            >
+          </div>
+        </div>
+      {:else}
+        <div class="rounded-lg border border-dashed border-zinc-800 px-4 py-6 text-center text-xs text-zinc-600">
+          No saved profiles — fill the form above.
+        </div>
+      {/each}
+    </div>
   </div>
 </div>

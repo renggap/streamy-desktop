@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { playlist, currentIndex } from '../stores';
+  import { playlist, currentIndex, playing } from '../stores';
   import { playIndex, addToPlaylist, openAudioFiles } from '../api';
 
   async function addFiles() {
@@ -22,28 +22,79 @@
   };
 </script>
 
-<div class="flex items-center justify-between px-4 py-2">
-  <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Playlist</h2>
-  <button class="rounded bg-zinc-800 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-700" onclick={addFiles}
-    >+ Add files</button
-  >
+<div class="flex flex-col gap-3 p-4">
+  <!-- Header -->
+  <div class="retro-chrome flex items-center justify-between rounded-lg px-4 py-3">
+    <div>
+      <div class="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Playlist</div>
+      <div class="text-[10px] text-zinc-600">{$playlist.length} {$playlist.length === 1 ? 'track' : 'tracks'}</div>
+    </div>
+    <button
+      class="rounded-lg bg-gradient-to-b from-emerald-500 to-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:from-emerald-400 hover:to-emerald-600 active:scale-95"
+      onclick={addFiles}
+    >
+      + Add files
+    </button>
+  </div>
+
+  <!-- Tracks -->
+  <div class="retro-chrome overflow-hidden rounded-lg">
+    {#each $playlist as track, i (track.path)}
+      <button
+        class="group flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-zinc-800/60 {$currentIndex === i
+          ? 'bg-zinc-800/80'
+          : ''}"
+        onclick={() => select(i)}
+      >
+        <!-- index / playing indicator -->
+        <span class="w-6 shrink-0 text-center">
+          {#if $currentIndex === i && $playing}
+            <span class="now-playing" aria-label="playing"><i></i><i></i><i></i></span>
+          {:else}
+            <span class="text-xs tabular-nums text-zinc-600 group-hover:text-zinc-400">{i + 1}</span>
+          {/if}
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="block truncate text-sm {$currentIndex === i ? 'text-cyan-300' : 'text-zinc-200'}">{track.title}</span>
+          {#if track.artist}<span class="block truncate text-[11px] text-zinc-500">{track.artist}</span>{/if}
+        </span>
+        <span class="shrink-0 text-xs tabular-nums text-zinc-500">{fmt(track.duration_secs)}</span>
+      </button>
+    {:else}
+      <div class="flex flex-col items-center gap-3 px-4 py-12 text-center">
+        <span class="text-3xl opacity-40">🎵</span>
+        <div class="text-sm text-zinc-500">No tracks yet</div>
+        <div class="text-[11px] text-zinc-600">Drag audio files onto the window, or</div>
+        <button
+          class="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700"
+          onclick={addFiles}>Add files</button
+        >
+      </div>
+    {/each}
+  </div>
 </div>
 
-<div>
-  {#each $playlist as track, i (track.path)}
-    <button
-      class="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-zinc-800/60 {$currentIndex === i
-        ? 'bg-zinc-800'
-        : ''}"
-      onclick={() => select(i)}
-    >
-      <span class="w-5 shrink-0 text-right text-xs text-zinc-500">{i + 1}</span>
-      <span class="min-w-0 flex-1 truncate text-sm text-zinc-200">{track.title}</span>
-      <span class="shrink-0 text-xs text-zinc-500">{fmt(track.duration_secs)}</span>
-    </button>
-  {:else}
-    <div class="px-4 py-8 text-center text-sm text-zinc-600">
-      No tracks. Drag audio files onto the window.
-    </div>
-  {/each}
-</div>
+<style>
+  .now-playing {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+  }
+  .now-playing i {
+    width: 3px;
+    background: #22d3ee;
+    border-radius: 1px;
+    animation: np-bounce 0.9s ease-in-out infinite;
+  }
+  .now-playing i:nth-child(1) { height: 50%; animation-delay: 0s; }
+  .now-playing i:nth-child(2) { height: 100%; animation-delay: 0.2s; }
+  .now-playing i:nth-child(3) { height: 70%; animation-delay: 0.4s; }
+  @keyframes np-bounce {
+    0%, 100% { transform: scaleY(0.4); }
+    50% { transform: scaleY(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .now-playing i { animation: none; }
+  }
+</style>
