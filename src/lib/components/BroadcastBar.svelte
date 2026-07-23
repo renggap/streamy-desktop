@@ -4,6 +4,8 @@
 
   let selected = $state('');
   let titleDraft = $state('');
+  let metaStatus = $state<'idle' | 'sending' | 'ok' | 'err'>('idle');
+  let metaTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
     if (!selected && $profiles.length) selected = $profiles[0].name;
@@ -56,13 +58,21 @@
 
   async function sendTitle() {
     const t = (titleDraft || '').trim();
-    if (!t) return;
+    if (!t || !connected) return;
+    clearTimeout(metaTimer);
+    metaStatus = 'sending';
     try {
       await setStreamTitle(t);
       streamTitle.set(t);
+      titleDraft = '';
+      metaStatus = 'ok';
     } catch (e) {
+      metaStatus = 'err';
       errorMsg.set(String(e));
     }
+    metaTimer = setTimeout(() => {
+      metaStatus = 'idle';
+    }, 2500);
   }
 
   const label = $derived(
@@ -161,9 +171,16 @@
       <button
         class="rounded bg-cyan-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-600 disabled:opacity-40"
         onclick={sendTitle}
-        disabled={!connected}
-      >Update</button>
+        disabled={!connected || metaStatus === 'sending'}
+      >
+        {metaStatus === 'sending' ? 'Sending…' : 'Update'}
+      </button>
     </div>
+    {#if metaStatus === 'ok'}
+      <div class="mt-1 text-[10px] text-emerald-400">✓ Title sent to server</div>
+    {:else if metaStatus === 'err'}
+      <div class="mt-1 text-[10px] text-red-400">✕ Update failed</div>
+    {/if}
   </div>
 </div>
 
