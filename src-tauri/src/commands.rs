@@ -305,6 +305,7 @@ pub async fn connect_stream(
         port: profile.port,
         stream_id: profile.stream_id,
         password,
+        user: profile.user,
         content_type: content_type.into(),
         bitrate_kbps,
         name: profile.station_name,

@@ -114,12 +114,23 @@ pub struct UltravoxConfig {
     pub host: String,
     pub port: u16,
     pub stream_id: u32,
+    /// Source password OR DJ password (when `user` is set, this is the DJ's).
     pub password: String,
+    /// DJ userid for DNASv2 DJ login. Empty = source-password connection.
+    /// DJ login only works over Ultravox (not ICY).
+    pub user: String,
     pub content_type: String, // "audio/mpeg"
     pub bitrate_kbps: u32,
     pub name: String,
     pub genre: String,
     pub url: String,
+}
+
+/// Build the Ultravox 2.1 auth payload (message 0x1001):
+/// `2.1:<stream_id>:<user_id>:<xtea(password)>\0`
+/// Empty `user_id` = source-password login; non-empty = DNASv2 DJ login.
+pub fn auth_payload(stream_id: u32, user_id: &str, xtea_password_hex: &str) -> Vec<u8> {
+    format!("2.1:{stream_id}:{user_id}:{xtea_password_hex}\0").into_bytes()
 }
 
 /// Run the Ultravox 2.1 source handshake. On success, returns the owned
@@ -139,10 +150,11 @@ pub async fn connect(cfg: &UltravoxConfig) -> Result<TcpStream, String> {
         .as_bytes()
         .to_vec();
 
-    // 2. Authenticate: "2.1:<sid>::<xtea(pwd)>" (uid empty -> xtea("")="")
+    // 2. Authenticate: "2.1:<sid>:<uid>:<xtea(pwd)>" — uid empty = source login,
+    // uid = DJ username for DNASv2 DJ login.
     let xpwd = xtea_encipher_hex(cfg.password.as_bytes(), &key);
-    let auth = format!("2.1:{}::{}\0", cfg.stream_id, xpwd);
-    send_control(&mut s, 0x1001, auth.into_bytes()).await?;
+    let auth = auth_payload(cfg.stream_id, &cfg.user, &xpwd);
+    send_control(&mut s, 0x1001, auth).await?;
     expect_ack(&mut s, "auth").await?;
 
     // 3. Stream MIME Type
@@ -222,6 +234,20 @@ mod tests {
     fn xtea_empty_key_is_zero_key() {
         // Non-empty data with empty key must produce output (zero key path).
         assert!(!xtea_encipher_hex(b"liverelay1234", b"").is_empty());
+    }
+
+    #[test]
+    fn auth_payload_source_login_has_empty_uid() {
+        // No DJ userid -> empty field between sid and password (source login).
+        let p = auth_payload(1, "", "deadbeef");
+        assert_eq!(p, b"2.1:1::deadbeef\0".to_vec());
+    }
+
+    #[test]
+    fn auth_payload_dj_login_includes_uid() {
+        // DJ login: userid populated, DJ password (already xtea'd) follows.
+        let p = auth_payload(3, "nadia", "cafe");
+        assert_eq!(p, b"2.1:3:nadia:cafe\0".to_vec());
     }
 
     #[test]

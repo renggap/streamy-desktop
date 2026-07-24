@@ -88,6 +88,19 @@
     <label class="flex flex-col gap-1"
       >Port <input type="number" class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.port} /></label
     >
+    <div class="flex flex-col gap-1">
+      <span class="text-zinc-300">Protocol</span>
+      <div class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-cyan-300">
+        Ultravox 2.1 · DNASv2
+      </div>
+    </div>
+    <label class="flex flex-col gap-1"
+      >DJ username <input class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.user} placeholder="(blank = source login)" /></label
+    >
+    <div class="col-span-2 text-[10px] text-zinc-500">
+      Leave DJ username blank to connect with the source password; set it to log in as a DNASv2 DJ
+      (uses your DJ password). DJ login runs over Ultravox.
+    </div>
     <label class="col-span-2 flex flex-col gap-1"
       >Password
       <input

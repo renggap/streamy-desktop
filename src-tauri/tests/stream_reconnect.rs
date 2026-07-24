@@ -67,6 +67,7 @@ fn cfg(port: u16) -> UltravoxConfig {
         port,
         stream_id: 1,
         password: String::new(), // empty pwd -> empty xtea; server doesn't check
+        user: String::new(),
         content_type: "audio/mpeg".into(),
         bitrate_kbps: 128,
         name: "Streamy".into(),

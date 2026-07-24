@@ -26,6 +26,7 @@ fn cfg() -> UltravoxConfig {
             .parse()
             .expect("sid"),
         password: std::env::var("STREAMY_PASS").expect("STREAMY_PASS"),
+        user: std::env::var("STREAMY_DJ").unwrap_or_default(),
         content_type: "audio/mpeg".into(),
         bitrate_kbps: 128,
         name: "Streamy probe".into(),
