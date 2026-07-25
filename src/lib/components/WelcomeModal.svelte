@@ -1,15 +1,33 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import WebView2Repair from './WebView2Repair.svelte';
+  import { webview2Installed } from '../api';
 
   let open = $state(false);
 
-  // Show once on first launch (webview present ⇒ localStorage available).
-  $effect(() => {
+  // Only show in the genuine "runtime not installed" case. If WebView2 is present
+  // (the normal case — the app couldn't run otherwise), suppress + remember.
+  onMount(async () => {
     try {
-      if (!localStorage.getItem('streamy.wv2_notice_seen')) open = true;
+      if (localStorage.getItem('streamy.wv2_notice_seen')) return;
     } catch {
-      open = true; // localStorage unavailable — show anyway.
+      /* localStorage unavailable */
     }
+    try {
+      const ok = await webview2Installed();
+      if (ok) {
+        try {
+          localStorage.setItem('streamy.wv2_notice_seen', '1');
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+    } catch {
+      // Detection command failed — don't bother the user; Repair stays in Settings.
+      return;
+    }
+    open = true;
   });
 
   function dismiss() {
@@ -35,13 +53,12 @@
         </div>
       </div>
 
-      <p class="text-xs leading-relaxed text-zinc-400">
-        Streamy runs on Microsoft's <span class="text-zinc-200">WebView2</span> runtime, which is
-        built into Windows 10 21H2+ and Windows 11 and is normally auto-installed alongside the app.
+      <p class="text-xs leading-relaxed text-amber-300">
+        The Microsoft WebView2 runtime wasn't found on this PC. Streamy needs it to run.
       </p>
       <p class="mt-2 text-xs leading-relaxed text-zinc-500">
-        If Streamy ever fails to start with a WebView2 message, run the repair below — it downloads
-        the official installer with a progress bar and reinstalls the runtime.
+        Click repair below — it downloads the official installer with a progress bar and installs
+        the runtime. Then relaunch Streamy.
       </p>
 
       <div class="mt-4 border-t border-zinc-800 pt-4">
@@ -51,7 +68,7 @@
       <div class="mt-5 flex justify-end">
         <button
           class="rounded-lg bg-zinc-800 px-4 py-2 text-xs font-semibold text-zinc-200 hover:bg-zinc-700"
-          onclick={dismiss}>Got it</button
+          onclick={dismiss}>Dismiss</button
         >
       </div>
     </div>

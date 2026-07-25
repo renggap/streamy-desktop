@@ -48,6 +48,7 @@ export const setOutputDevice = (name: string | null) =>
 export const setRecordingDir = (dir: string | null) =>
   invoke<void>('set_recording_dir', { dir });
 export const repairWebview2 = () => invoke<string>('repair_webview2');
+export const webview2Installed = () => invoke<boolean>('webview2_installed');
 export const getSettings = () =>
   invoke<{
     input_device: string | null;

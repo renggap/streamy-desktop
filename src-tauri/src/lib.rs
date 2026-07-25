@@ -51,6 +51,7 @@ pub fn run() {
             commands::start_recording,
             commands::stop_recording,
             commands::repair_webview2,
+            commands::webview2_installed,
         ])
         .manage(engine::engine::AudioEngine::new())
         .manage(std::sync::Mutex::new(

@@ -485,6 +485,47 @@ struct Wv2Progress {
     total: Option<u64>,
 }
 
+/// Is the WebView2 runtime installed? On Windows, checks the EdgeUpdate registry
+/// keys (per-machine WOW64 + native, and per-user). Non-Windows: always true.
+/// Used to suppress the repair interstitial when the runtime is already present.
+#[tauri::command]
+pub fn webview2_installed() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        is_webview2_installed()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        true
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn is_webview2_installed() -> bool {
+    use std::process::Command;
+    // Evergreen standalone runtime client id.
+    const CID: &str = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+    let keys = [
+        format!("HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{CID}"),
+        format!("HKLM\\SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{CID}"),
+        format!("HKCU\\Software\\Microsoft\\EdgeUpdate\\Clients\\{CID}"),
+    ];
+    for key in keys {
+        let out = Command::new("reg").args(["query", &key, "/v", "pv"]).output();
+        if let Ok(out) = out {
+            if !out.status.success() {
+                continue;
+            }
+            // Key exists; pv = "0.0.0.0" is the not-installed placeholder.
+            let s = String::from_utf8_lossy(&out.stdout);
+            if !s.contains("0.0.0.0") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Download the official WebView2 bootstrapper (small, ~2 MB) with live progress
 /// events, then run it so Microsoft's installer can install/repair the runtime.
 /// The installer runs with its own UI (and UAC) so the user sees the runtime
