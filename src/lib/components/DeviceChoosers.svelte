@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { inputDevices, outputDevices, selectedInput, selectedOutput, errorMsg } from '../stores';
-  import { setInputDevice, setOutputDevice } from '../api';
+  import { inputDevices, outputDevices, selectedInput, selectedOutput, volume, errorMsg } from '../stores';
+  import { setInputDevice, setOutputDevice, setVolume } from '../api';
 
   async function onInput(e: Event) {
     const name = (e.currentTarget as HTMLSelectElement).value;
@@ -21,6 +21,20 @@
     } catch (e) {
       errorMsg.set(String(e));
     }
+  }
+
+  // Master volume: 0..200% (100 = unity). The store updates instantly for
+  // display; the backend apply+persist is debounced so a drag doesn't fire one
+  // IPC call + settings.json write per pixel (or overflow the engine action
+  // ring, which would surface a spurious "audio control queue full").
+  let volTimer: ReturnType<typeof setTimeout> | undefined;
+  function onVolume(e: Event) {
+    const pct = parseInt((e.currentTarget as HTMLInputElement).value, 10);
+    volume.set(pct);
+    clearTimeout(volTimer);
+    volTimer = setTimeout(() => {
+      setVolume(pct).catch((e) => errorMsg.set(String(e)));
+    }, 120);
   }
 </script>
 
@@ -46,4 +60,28 @@
       {#each $outputDevices as d (d.id)}<option value={d.id}>{d.name}</option>{/each}
     </select>
   </label>
+  <label class="block">
+    <span class="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider text-zinc-500">
+      <span>Volume</span>
+      <span class="tabular-nums text-zinc-300">{$volume}%</span>
+    </span>
+    <input
+      type="range"
+      min="0"
+      max="200"
+      step="1"
+      value={$volume}
+      oninput={onVolume}
+      class="streamy-range w-full"
+      aria-label="Master volume"
+    />
+  </label>
 </div>
+
+<style>
+  .streamy-range {
+    accent-color: #10b981;
+    height: 1.25rem;
+    cursor: pointer;
+  }
+</style>

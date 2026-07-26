@@ -17,7 +17,6 @@ use crate::encode::{Codec, EncoderConfig};
 use crate::events;
 use crate::playlist::model::{Playlist, Track};
 use crate::profile::store::{ConnectionProfile, ProfileStore};
-use crate::profile::store::Protocol;
 use crate::record::{RecFormat, RecorderHandle, RecordingStatus};
 use crate::settings::{Settings, SettingsStore};
 use crate::stream::broadcast::{self, BroadcastHandle, StreamConfig, StreamStatus};
@@ -247,6 +246,18 @@ pub fn set_recording_dir(
     settings.set_recording_dir(dir)
 }
 
+/// Master output volume as a percent (0..=200). Persisted + applied live.
+#[tauri::command]
+pub fn set_volume(
+    volume_pct: f32,
+    engine: State<'_, AudioEngine>,
+    settings: State<'_, SettingsStore>,
+) -> Result<(), String> {
+    let gain = (volume_pct / 100.0).clamp(0.0, 2.0);
+    settings.set_volume(gain)?;
+    engine.set_volume(gain)
+}
+
 #[tauri::command]
 pub fn get_settings(settings: State<'_, SettingsStore>) -> Settings {
     settings.get()
@@ -302,22 +313,26 @@ pub async fn connect_stream(
         Codec::Mp3 => "audio/mpeg",
         Codec::Aac => "audio/aacp",
     };
-    let stream_cfg = match profile.protocol {
-        Protocol::Ultravox => StreamConfig::Ultravox(UltravoxConfig {
+    // Auto-detect: try Ultravox (DNAS2) first, fall back to Icecast/Liquidsoap
+    // harbor. The user no longer picks a protocol — connect_stream hands both
+    // configs to the streamer, which latches to whichever handshake succeeds.
+    let sample_rate = engine.output_rate();
+    let stream_cfg = StreamConfig::Auto {
+        ultravox: UltravoxConfig {
             host: profile.host.clone(),
             port: profile.port,
             stream_id: profile.stream_id,
-            password,
+            password: password.clone(),
             user: profile.user.clone(),
             content_type: content_type.into(),
             bitrate_kbps,
             name: profile.station_name.clone(),
             genre: profile.genre.clone(),
             url: profile.url.clone(),
-        }),
+        },
         // Icecast / Liquidsoap harbor: HTTP SOURCE + Basic auth (user + source
         // password); metadata over the /admin/metadata admin endpoint.
-        Protocol::Icy => StreamConfig::Icecast(IcySourceConfig {
+        icecast: IcySourceConfig {
             host: profile.host.clone(),
             port: profile.port,
             mount: profile.mount.clone(),
@@ -329,11 +344,11 @@ pub async fn connect_stream(
             icy_url: profile.url.clone(),
             icy_pub: profile.public,
             icy_br: bitrate_kbps,
-            sample_rate: engine.output_rate(),
-        }),
+            sample_rate,
+        },
     };
     let enc_cfg = EncoderConfig {
-        sample_rate: engine.output_rate(),
+        sample_rate,
         channels: 2,
         bitrate_kbps,
         codec,
@@ -375,15 +390,24 @@ pub async fn set_stream_title(
     title: String,
     bcast: State<'_, Mutex<Option<BroadcastHandle>>>,
 ) -> Result<(), String> {
-    let tx = bcast
-        .lock()
-        .map_err(|e| e.to_string())?
-        .as_ref()
-        .map(|h| h.metadata_tx.clone());
-    if let Some(tx) = tx {
-        tx.send(title).await.map_err(|e| e.to_string())?;
+    // Pull what we need under a brief lock; never await while holding it (the
+    // Icecast metadata round-trip can take up to its 5s timeout).
+    let (ice_admin, uvox_tx) = {
+        let g = bcast.lock().map_err(|e| e.to_string())?;
+        match g.as_ref() {
+            Some(h) => (h.icecast_admin.clone(), Some(h.metadata_tx.clone())),
+            None => (None, None),
+        }
+    };
+    match (ice_admin, uvox_tx) {
+        // Icecast: metadata is a separate admin HTTP GET — send it direct so a
+        // busy or dead audio streamer can't make title updates fail with
+        // "channel closed" (the streamer owns the in-band path).
+        (Some(admin), _) => crate::stream::icy::send_metadata(&admin, &title).await,
+        // Ultravox: in-band on the audio socket, via the streamer's channel.
+        (None, Some(tx)) => tx.send(title).await.map_err(|e| e.to_string()),
+        (None, None) => Ok(()), // not connected — no-op
     }
-    Ok(())
 }
 
 // --- P3 recording ---

@@ -3,8 +3,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-/// Small persisted app settings (last-used input/output device names, recording dir).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// Small persisted app settings (last-used input/output device names, recording
+/// dir, master volume). `Default` is impl'd manually so a fresh install gets
+/// unity volume — deriving Default would give 0.0 (silent).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default)]
     pub input_device: Option<String>,
@@ -13,6 +15,24 @@ pub struct Settings {
     /// Where recordings land; defaults to <app-data>/recordings when None.
     #[serde(default)]
     pub recording_dir: Option<String>,
+    /// Master output gain (1.0 = unity / 100%). 0.0..=2.0.
+    #[serde(default = "default_volume")]
+    pub volume: f32,
+}
+
+fn default_volume() -> f32 {
+    1.0
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            input_device: None,
+            output_device: None,
+            recording_dir: None,
+            volume: default_volume(),
+        }
+    }
 }
 
 pub struct SettingsStore {
@@ -52,6 +72,13 @@ impl SettingsStore {
     pub fn set_recording_dir(&self, dir: Option<String>) -> Result<(), String> {
         let mut g = self.inner.lock().map_err(|e| e.to_string())?;
         g.recording_dir = dir;
+        self.persist(&g)
+    }
+
+    /// Master gain, 0.0..=2.0 (1.0 = unity).
+    pub fn set_volume(&self, gain: f32) -> Result<(), String> {
+        let mut g = self.inner.lock().map_err(|e| e.to_string())?;
+        g.volume = gain;
         self.persist(&g)
     }
 

@@ -47,11 +47,16 @@ pub enum StreamStatus {
     Error { message: String },
 }
 
-/// Connection parameters for either supported source protocol. Built from a
-/// `ConnectionProfile` + resolved password in `connect_stream`.
+/// Connection parameters for the source protocol. `Auto` tries Ultravox first
+/// and falls back to Icecast — the app no longer asks the user to pick. Built
+/// from a `ConnectionProfile` + resolved password in `connect_stream`.
 pub enum StreamConfig {
     Ultravox(UltravoxConfig),
     Icecast(IcySourceConfig),
+    Auto {
+        ultravox: UltravoxConfig,
+        icecast: IcySourceConfig,
+    },
 }
 
 /// A live source connection owning its transfer socket. Ultravox keeps
@@ -94,6 +99,11 @@ pub struct BroadcastHandle {
     stop: Arc<AtomicBool>,
     streamer: JoinHandle<()>,
     pub metadata_tx: mpsc::Sender<String>,
+    /// Resolved Icecast admin cfg when the live source is Icecast — lets
+    /// `set_stream_title` push metadata direct via the `/admin/metadata` GET,
+    /// independent of the audio streamer task. `None` for Ultravox (metadata
+    /// is in-band on the audio socket, so it goes through `metadata_tx`).
+    pub icecast_admin: Option<IcySourceConfig>,
 }
 
 /// Connect and run the encoder + streamer against `rx` (broadcast PCM),
@@ -122,12 +132,32 @@ pub async fn start_with_opts(
 
     // Initial connect: failure here is returned to the caller (Connect button
     // shows it). Mid-stream drops are handled by the reconnect loop below.
+    let mut cfg = cfg;
     let mut source = match connect_source(&cfg, handshake_timeout_secs).await {
         Ok(s) => s,
         Err(e) => {
             emit_status(&app, StreamStatus::Error { message: e.clone() });
             return Err(e);
         }
+    };
+    // Latch Auto → concrete protocol so reconnects use the resolved path and
+    // don't re-probe (and so we know which metadata path to use).
+    if matches!(cfg, StreamConfig::Auto { .. }) {
+        let latched = match (&cfg, &source) {
+            (StreamConfig::Auto { ultravox, .. }, Source::Ultravox(_)) => {
+                StreamConfig::Ultravox(ultravox.clone())
+            }
+            (StreamConfig::Auto { icecast, .. }, Source::Icecast { .. }) => {
+                StreamConfig::Icecast(icecast.clone())
+            }
+            _ => unreachable!("Auto must resolve to Ultravox or Icecast"),
+        };
+        cfg = latched;
+    }
+    // Icecast metadata goes direct (separate HTTP GET); Ultravox is in-band.
+    let icecast_admin = match &source {
+        Source::Icecast { admin, .. } => Some(admin.clone()),
+        _ => None,
     };
     emit_status(&app, StreamStatus::Connected);
 
@@ -226,7 +256,7 @@ pub async fn start_with_opts(
         }
     });
 
-    Ok(BroadcastHandle { stop, streamer, metadata_tx })
+    Ok(BroadcastHandle { stop, streamer, metadata_tx, icecast_admin })
 }
 
 /// Stream until the socket errors (returns `true` → caller reconnects) or stop is
@@ -293,28 +323,52 @@ async fn wait_for_stop(stop: &Arc<AtomicBool>) {
     }
 }
 
+/// Run the Ultravox handshake with a timeout cap.
+async fn connect_ultravox(c: &UltravoxConfig, timeout_secs: u64) -> Result<Source, String> {
+    let s = match tokio::time::timeout(Duration::from_secs(timeout_secs), ultravox::connect(c)).await
+    {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err(e),
+        Err(_) => return Err(format!("connect timed out after {timeout_secs}s")),
+    };
+    Ok(Source::Ultravox(s))
+}
+
+/// Run the Icecast handshake with a timeout cap.
+async fn connect_icecast(c: &IcySourceConfig, timeout_secs: u64) -> Result<Source, String> {
+    let s = match tokio::time::timeout(
+        Duration::from_secs(timeout_secs),
+        crate::stream::icy::connect(c),
+    )
+    .await
+    {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err(e),
+        Err(_) => return Err(format!("connect timed out after {timeout_secs}s")),
+    };
+    Ok(Source::Icecast {
+        stream: s,
+        admin: c.clone(),
+    })
+}
+
 /// Run the source handshake with a cap so a silent server can't hang Connect.
+/// `Auto` tries Ultravox first (DNAS2), then falls back to Icecast/Liquidsoap.
 async fn connect_source(cfg: &StreamConfig, timeout_secs: u64) -> Result<Source, String> {
-    let timeout = Duration::from_secs(timeout_secs);
     match cfg {
-        StreamConfig::Ultravox(c) => {
-            let s = match tokio::time::timeout(timeout, ultravox::connect(c)).await {
-                Ok(Ok(s)) => s,
-                Ok(Err(e)) => return Err(e),
-                Err(_) => return Err(format!("connect timed out after {timeout_secs}s")),
-            };
-            Ok(Source::Ultravox(s))
-        }
-        StreamConfig::Icecast(c) => {
-            let s = match tokio::time::timeout(timeout, crate::stream::icy::connect(c)).await {
-                Ok(Ok(s)) => s,
-                Ok(Err(e)) => return Err(e),
-                Err(_) => return Err(format!("connect timed out after {timeout_secs}s")),
-            };
-            Ok(Source::Icecast {
-                stream: s,
-                admin: c.clone(),
-            })
+        StreamConfig::Ultravox(c) => connect_ultravox(c, timeout_secs).await,
+        StreamConfig::Icecast(c) => connect_icecast(c, timeout_secs).await,
+        StreamConfig::Auto { ultravox, icecast } => {
+            // Try Ultravox first (DNAS2). A non-Ultravox server (Icecast /
+            // Liquidsoap harbor) rejects the binary handshake fast — the first
+            // response byte isn't the 0x5A sync — so the Icecast fallback is
+            // usually immediate. The short probe cap only matters for a server
+            // that stays totally silent.
+            let probe_secs = timeout_secs.min(4);
+            if let Ok(s) = connect_ultravox(ultravox, probe_secs).await {
+                return Ok(s);
+            }
+            connect_icecast(icecast, timeout_secs).await
         }
     }
 }
@@ -337,5 +391,100 @@ impl BroadcastHandle {
 fn emit_status(app: &Option<AppHandle>, status: StreamStatus) {
     if let Some(a) = app {
         let _ = a.emit(events::STREAM_STATUS, status);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stream::icy::IcySourceConfig;
+    use crate::stream::ultravox::UltravoxConfig;
+    use std::env;
+
+    fn envs() -> Option<(String, u16, String, String, String)> {
+        let host = env::var("STREAMY_ICE_HOST").ok()?;
+        let port: u16 = env::var("STREAMY_ICE_PORT").ok()?.parse().ok()?;
+        let user = env::var("STREAMY_ICE_USER").ok()?;
+        let pass = env::var("STREAMY_ICE_PASS").ok()?;
+        let mount = env::var("STREAMY_ICE_MOUNT").unwrap_or_else(|_| "/".into());
+        Some((host, port, user, pass, mount))
+    }
+
+    /// Live: Auto-detect against a Liquidsoap harbor must reject the Ultravox
+    /// probe and fall back to Icecast, resolving to the Icecast source. Then
+    /// exercise audio write + the direct (non-channel) metadata path that
+    /// `set_stream_title` uses for Icecast. Creds via env, never committed.
+    ///   cargo test --lib auto_detect_resolves_icecast_on_harbor -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn auto_detect_resolves_icecast_on_harbor() {
+        let (host, port, user, pass, mount) = match envs() {
+            Some(v) => v,
+            None => {
+                eprintln!("skip: set STREAMY_ICE_HOST/PORT/USER/PASS[/MOUNT]");
+                return;
+            }
+        };
+        let icecast = IcySourceConfig {
+            host: host.clone(),
+            port,
+            mount,
+            user: user.clone(),
+            password: pass.clone(),
+            content_type: "audio/mpeg".into(),
+            icy_name: "Streamy auto-detect test".into(),
+            icy_genre: "Test".into(),
+            icy_url: "".into(),
+            icy_pub: true,
+            icy_br: 128,
+            sample_rate: 44100,
+        };
+        // Bogus Ultravox cfg — the harbor rejects the binary handshake (no 0x5A
+        // sync in its response), forcing the Icecast fallback.
+        let ultravox = UltravoxConfig {
+            host: host.clone(),
+            port,
+            stream_id: 1,
+            password: pass.clone(),
+            user: user.clone(),
+            content_type: "audio/mpeg".into(),
+            bitrate_kbps: 128,
+            name: "Streamy".into(),
+            genre: "".into(),
+            url: "".into(),
+        };
+        let cfg = StreamConfig::Auto { ultravox, icecast };
+        let mut src = connect_source(&cfg, 15)
+            .await
+            .expect("auto connect should resolve");
+        assert!(
+            matches!(src, Source::Icecast { .. }),
+            "auto-detect must resolve to Icecast on a harbor"
+        );
+
+        // Exercise the audio write path with a real MP3 chunk.
+        let enc_cfg = crate::encode::EncoderConfig {
+            sample_rate: 44100,
+            channels: 2,
+            bitrate_kbps: 128,
+            codec: crate::encode::Codec::Mp3,
+        };
+        let mut enc = crate::encode::build(&enc_cfg).expect("encoder");
+        let two_pi = 2.0 * std::f64::consts::PI;
+        let mut samples = Vec::with_capacity(4410 * 2);
+        for i in 0..4410usize {
+            let v = (two_pi * 440.0 * (i as f64 / 44100.0)).sin() as f32 * 0.5;
+            samples.push(v);
+            samples.push(v);
+        }
+        let mp3 = enc.encode(&samples).expect("encode");
+        src.send_audio(&mp3).await.expect("audio write");
+
+        // Direct metadata GET (the path set_stream_title uses for Icecast).
+        if let Source::Icecast { admin, .. } = &src {
+            crate::stream::icy::send_metadata(admin, "Streamy auto-detect live")
+                .await
+                .expect("metadata");
+        }
     }
 }

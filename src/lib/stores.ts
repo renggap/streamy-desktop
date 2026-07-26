@@ -13,6 +13,8 @@ export const outputDevices = writable<DeviceInfo[]>([]);
 export const selectedInput = writable<string>('');
 export const selectedOutput = writable<string>('');
 export const recDir = writable<string | null>(null);
+/** Master output volume as a percent (0..=200, default 100 = unity). */
+export const volume = writable<number>(100);
 export const streamTitle = writable<string>('');
 export const sourceMode = writable<SourceMode>('file');
 

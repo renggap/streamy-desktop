@@ -110,6 +110,7 @@ async fn send_control<R: AsyncWriteExt + Unpin>(
         .map_err(|e| e.to_string())
 }
 
+#[derive(Clone)]
 pub struct UltravoxConfig {
     pub host: String,
     pub port: u16,

@@ -19,6 +19,7 @@
     selectedInput,
     selectedOutput,
     recDir,
+    volume,
     streamTitle,
     recording,
     recordingPath,
@@ -64,11 +65,12 @@
     listInputDevices().then(inputDevices.set);
     listOutputDevices().then(outputDevices.set);
     listProfiles().then(profiles.set);
-    // Restore persisted device + recording-folder choices for display.
+    // Restore persisted device + recording-folder + volume choices for display.
     getSettings().then((s) => {
       if (s.input_device) selectedInput.set(s.input_device);
       if (s.output_device) selectedOutput.set(s.output_device);
       if (s.recording_dir) recDir.set(s.recording_dir);
+      if (typeof s.volume === 'number') volume.set(Math.round(s.volume * 100));
     });
 
     const np = listen<Track>('now_playing', (e) => {

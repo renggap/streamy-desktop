@@ -41,6 +41,7 @@ pub fn run() {
             commands::set_input_device,
             commands::set_output_device,
             commands::set_recording_dir,
+            commands::set_volume,
             commands::get_settings,
             commands::list_profiles,
             commands::save_profile,
@@ -106,6 +107,9 @@ pub fn run() {
                     .state::<engine::engine::AudioEngine>()
                     .set_output_device(Some(name));
             }
+            // Restore the master volume (defaults to unity / 100%).
+            let vol = app.state::<settings::SettingsStore>().get().volume;
+            let _ = app.state::<engine::engine::AudioEngine>().set_volume(vol);
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()

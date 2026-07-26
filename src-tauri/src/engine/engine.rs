@@ -31,6 +31,7 @@ pub enum Action {
     SetCrossfade(f32),
     SetEq(f64, f64, f64),
     SetDuck(bool, f32, f32),
+    SetVolume(f32),
 }
 
 /// Signals to the audio loop: rebuild the stream (e.g. output device lost) or
@@ -58,6 +59,8 @@ struct EngineState {
     duck_depth_db: f32,
     music_rms: f32,
     duck_gain: f32,
+    /// Master output gain (1.0 = unity). Applied to the monitor + broadcast mix.
+    volume: f32,
     meter: Meter,
     source_mode: SourceMode,
     cons: rtrb::Consumer<Action>,
@@ -115,6 +118,7 @@ impl AudioEngine {
             duck_depth_db: 12.0,
             music_rms: 0.0,
             duck_gain: 1.0,
+            volume: 1.0,
             meter: Meter::new(FALLBACK_RATE),
             source_mode: SourceMode::File,
             cons,
@@ -174,6 +178,10 @@ impl AudioEngine {
     }
     pub fn set_duck(&self, enabled: bool, threshold: f32, depth_db: f32) -> Result<(), String> {
         self.push(Action::SetDuck(enabled, threshold, depth_db))
+    }
+    /// Master output gain, 0.0..=2.0 (1.0 = unity / 100%).
+    pub fn set_volume(&self, gain: f32) -> Result<(), String> {
+        self.push(Action::SetVolume(gain.clamp(0.0, 2.0)))
     }
     pub fn set_input_device(&self, name: String) -> Result<(), String> {
         self.mic.set_device(name)
@@ -368,6 +376,7 @@ fn build_output_stream(
                                 s.duck_threshold = th;
                                 s.duck_depth_db = db;
                             }
+                            Action::SetVolume(v) => s.volume = v.clamp(0.0, 2.0),
                         }
                     }
                     // 2. Produce + meter frames.
@@ -407,6 +416,10 @@ fn build_output_stream(
                             &[deck_frame, mic_out],
                             &[sends.decks_broadcast, sends.mic_broadcast],
                         );
+                        // Master gain on the final mix (monitor + broadcast alike).
+                        let g = s.volume;
+                        let mon = [mon[0] * g, mon[1] * g];
+                        let bcast = [bcast[0] * g, bcast[1] * g];
                         if let Some(tx) = s.broadcast_tx.as_mut() {
                             let _ = tx.push(bcast);
                         }
