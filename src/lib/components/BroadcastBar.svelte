@@ -158,7 +158,9 @@
     </div>
   </div>
 
-  <!-- Stream title (songtitle, in-band via Ultravox 0x3902 — no admin password) -->
+  <!-- Stream title (songtitle): Ultravox sends it in-band (0x3902); Icecast uses
+       the /admin/metadata endpoint. Both reuse the source/DJ creds — no separate
+       admin password. -->
   <div class="mt-3 border-t border-zinc-800 pt-3">
     <span class="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">Stream title</span>
     <div class="flex gap-2">

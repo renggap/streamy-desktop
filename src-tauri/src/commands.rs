@@ -17,9 +17,11 @@ use crate::encode::{Codec, EncoderConfig};
 use crate::events;
 use crate::playlist::model::{Playlist, Track};
 use crate::profile::store::{ConnectionProfile, ProfileStore};
+use crate::profile::store::Protocol;
 use crate::record::{RecFormat, RecorderHandle, RecordingStatus};
 use crate::settings::{Settings, SettingsStore};
-use crate::stream::broadcast::{self, BroadcastHandle, StreamStatus};
+use crate::stream::broadcast::{self, BroadcastHandle, StreamConfig, StreamStatus};
+use crate::stream::icy::IcySourceConfig;
 use crate::stream::ultravox::UltravoxConfig;
 
 /// Read (title, artist, duration_secs) from tags; fall back to filename + 0.
@@ -300,17 +302,35 @@ pub async fn connect_stream(
         Codec::Mp3 => "audio/mpeg",
         Codec::Aac => "audio/aacp",
     };
-    let uvox_cfg = UltravoxConfig {
-        host: profile.host,
-        port: profile.port,
-        stream_id: profile.stream_id,
-        password,
-        user: profile.user,
-        content_type: content_type.into(),
-        bitrate_kbps,
-        name: profile.station_name,
-        genre: profile.genre,
-        url: profile.url,
+    let stream_cfg = match profile.protocol {
+        Protocol::Ultravox => StreamConfig::Ultravox(UltravoxConfig {
+            host: profile.host.clone(),
+            port: profile.port,
+            stream_id: profile.stream_id,
+            password,
+            user: profile.user.clone(),
+            content_type: content_type.into(),
+            bitrate_kbps,
+            name: profile.station_name.clone(),
+            genre: profile.genre.clone(),
+            url: profile.url.clone(),
+        }),
+        // Icecast / Liquidsoap harbor: HTTP SOURCE + Basic auth (user + source
+        // password); metadata over the /admin/metadata admin endpoint.
+        Protocol::Icy => StreamConfig::Icecast(IcySourceConfig {
+            host: profile.host.clone(),
+            port: profile.port,
+            mount: profile.mount.clone(),
+            user: profile.user.clone(),
+            password,
+            content_type: content_type.into(),
+            icy_name: profile.station_name.clone(),
+            icy_genre: profile.genre.clone(),
+            icy_url: profile.url.clone(),
+            icy_pub: profile.public,
+            icy_br: bitrate_kbps,
+            sample_rate: engine.output_rate(),
+        }),
     };
     let enc_cfg = EncoderConfig {
         sample_rate: engine.output_rate(),
@@ -321,7 +341,7 @@ pub async fn connect_stream(
 
     let (tx, rx) = rtrb::RingBuffer::<[f32; 2]>::new(16384);
     engine.set_broadcast_producer(Some(tx));
-    match broadcast::start(rx, uvox_cfg, enc_cfg, Some(app)).await {
+    match broadcast::start(rx, stream_cfg, enc_cfg, Some(app)).await {
         Ok(h) => {
             if let Ok(mut g) = bcast.lock() {
                 *g = Some(h);

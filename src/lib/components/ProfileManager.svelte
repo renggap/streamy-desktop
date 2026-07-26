@@ -7,6 +7,10 @@
   let password = $state('');
   let isEditing = $state(false);
 
+  // Protocol drives which fields matter: Icecast uses mount + Basic-auth user;
+  // Ultravox uses stream_id + optional DJ userid.
+  const isIcy = $derived(editing.protocol === 'icy');
+
   function blank(): ConnectionProfile {
     return {
       name: '',
@@ -45,6 +49,10 @@
       errorMsg.set('Name and host are required.');
       return;
     }
+    if (isIcy && !editing.user) {
+      errorMsg.set('Icecast needs a source/DJ username (Basic auth).');
+      return;
+    }
     if (!exists && !password) {
       errorMsg.set('Password is required for a new profile.');
       return;
@@ -80,7 +88,20 @@
       >Name <input class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.name} disabled={isEditing} /></label
     >
     <label class="flex flex-col gap-1"
-      >Stream ID <input type="number" class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.stream_id} /></label
+      >{isIcy ? 'Mount' : 'Stream ID'}
+      {#if isIcy}
+        <input
+          class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200"
+          bind:value={editing.mount}
+          placeholder="/"
+        />
+      {:else}
+        <input
+          type="number"
+          class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200"
+          bind:value={editing.stream_id}
+        />
+      {/if}</label
     >
     <label class="flex flex-col gap-1"
       >Host <input class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.host} /></label
@@ -88,18 +109,33 @@
     <label class="flex flex-col gap-1"
       >Port <input type="number" class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.port} /></label
     >
-    <div class="flex flex-col gap-1">
+    <label class="flex flex-col gap-1">
       <span class="text-zinc-300">Protocol</span>
-      <div class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-cyan-300">
-        Ultravox 2.1 · DNASv2
-      </div>
-    </div>
+      <select
+        class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-cyan-300"
+        bind:value={editing.protocol}
+      >
+        <option value="ultravox">Ultravox 2.1 (DNASv2)</option>
+        <option value="icy">Icecast / Liquidsoap</option>
+      </select>
+    </label>
     <label class="flex flex-col gap-1"
-      >DJ username <input class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200" bind:value={editing.user} placeholder="(blank = source login)" /></label
+      >{isIcy ? 'Source username' : 'DJ username'}
+      <input
+        class="rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200"
+        bind:value={editing.user}
+        placeholder={isIcy ? '(icecast source/DJ login)' : '(blank = source login)'}
+      /></label
     >
     <div class="col-span-2 text-[10px] text-zinc-500">
-      Leave DJ username blank to connect with the source password; set it to log in as a DNASv2 DJ
-      (uses your DJ password). DJ login runs over Ultravox.
+      {#if isIcy}
+        Icecast / Liquidsoap harbor — HTTP SOURCE + Basic auth. Use your source (or DJ) username +
+        password; the mount is the stream path (e.g. <code class="text-zinc-400">/</code>). Now-playing
+        titles update via the <code class="text-zinc-400">/admin/metadata</code> endpoint.
+      {:else}
+        Ultravox 2.1 (DNASv2) — leave DJ username blank to connect with the source password, or set it
+        to log in as a DNASv2 DJ (uses your DJ password). DJ login runs over Ultravox.
+      {/if}
     </div>
     <label class="col-span-2 flex flex-col gap-1"
       >Password
@@ -144,7 +180,7 @@
               <span class="truncate text-sm font-medium text-zinc-100">{p.name}</span>
               <span class="rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-400">{p.protocol}</span>
             </div>
-            <div class="truncate text-[11px] text-zinc-500">{p.host}<span class="text-zinc-600">:{p.port}</span> · sid {p.stream_id}</div>
+            <div class="truncate text-[11px] text-zinc-500">{p.host}<span class="text-zinc-600">:{p.port}</span> · {p.protocol === 'icy' ? `mount ${p.mount || '/'}` : `sid ${p.stream_id}`}</div>
           </div>
           <div class="flex shrink-0 gap-1">
             <button
