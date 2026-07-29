@@ -1,6 +1,6 @@
 [package]
 name = "streamy-desktop"
-version = "0.1.0"
+version = "1.1.0"
 description = "Winamp-style desktop broadcaster for Shoutcast v2"
 authors = ["Streamy Dev"]
 license = ""

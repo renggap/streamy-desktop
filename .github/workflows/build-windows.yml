@@ -32,6 +32,28 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
+      - name: Set build version (major.minor.<run_number>)
+        shell: pwsh
+        run: |
+          # Base version lives in Cargo.toml (e.g. "1.1.0"). Each CI build
+          # stamps the patch with the run number so every .exe is unique and
+          # monotonically increasing (1.1.47, 1.1.48, ...). Repo stays 1.1.0;
+          # nothing is committed back.
+          $line = Select-String -Path src-tauri/Cargo.toml -Pattern '^version = "(\d+)\.(\d+)\.'
+          $major = $line.Matches.Groups[1].Value
+          $minor = $line.Matches.Groups[2].Value
+          $ver = "$major.$minor.${{ github.run_number }}"
+          Write-Host "Build version: $ver"
+          (Get-Content src-tauri/Cargo.toml) `
+            -replace '^version = ".*"', "version = `"$ver`"" |
+            Set-Content src-tauri/Cargo.toml
+          (Get-Content src-tauri/tauri.conf.json) `
+            -replace '"version":\s*"[^"]*"', "`"version`": `"$ver`"" |
+            Set-Content src-tauri/tauri.conf.json
+          (Get-Content package.json) `
+            -replace '"version":\s*"[^"]*"', "`"version`": `"$ver`"" |
+            Set-Content package.json
+
       - name: Build Tauri app (.msi + .exe)
         run: npm run tauri build
 
