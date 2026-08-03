@@ -47,6 +47,12 @@ export interface StreamStatus {
   message?: string;
 }
 
+export interface StreamStats {
+  kbps: number;
+  total_bytes: number;
+}
+export const streamStats = writable<StreamStats>({ kbps: 0, total_bytes: 0 });
+
 export type RecFormat = 'mp3' | 'wav';
 export const recFormat = writable<RecFormat>('mp3');
 export const recording = writable(false);

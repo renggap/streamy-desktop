@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { profiles, streamStatus, bitrate, codec, view, errorMsg, streamTitle } from '../stores';
+  import { profiles, streamStatus, bitrate, codec, view, errorMsg, streamTitle, streamStats } from '../stores';
   import { connectStream, disconnectStream, setStreamTitle, BITRATES } from '../api';
 
   let selected = $state('');
@@ -14,6 +14,11 @@
   const connected = $derived($streamStatus.state === 'connected');
   const busy = $derived($streamStatus.state === 'connecting');
   const hasProfile = $derived($profiles.length > 0);
+  const statsLine = $derived(
+    connected
+      ? `▲ ${$streamStats.kbps.toFixed(1)} kb/s · ${($streamStats.total_bytes / (1024 * 1024)).toFixed(1)} MB`
+      : ''
+  );
 
   async function connect(name: string) {
     await connectStream(name, $bitrate, $codec);
@@ -155,6 +160,9 @@
           idle
         {/if}
       </div>
+      {#if connected}
+        <div class="mt-1 text-[10px] tabular-nums text-cyan-400">{statsLine}</div>
+      {/if}
     </div>
   </div>
 

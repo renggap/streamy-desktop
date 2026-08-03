@@ -26,6 +26,7 @@
     recordingPath,
     recStartedAt,
     wv2Progress,
+    streamStats,
   } from './lib/stores';
   import {
     next,
@@ -39,7 +40,7 @@
     getSettings,
   } from './lib/api';
   import type { LevelMeter, Track } from './lib/api';
-  import type { Position, RecordingStatus, StreamStatus } from './lib/stores';
+  import type { Position, RecordingStatus, StreamStatus, StreamStats } from './lib/stores';
   import NowPlaying from './lib/components/NowPlaying.svelte';
   import Playlist from './lib/components/Playlist.svelte';
   import SourceToggle from './lib/components/SourceToggle.svelte';
@@ -90,7 +91,13 @@
     });
     const lvl = listen<LevelMeter>('levels', (e) => levels.set(e.payload));
     const pos = listen<Position>('position', (e) => position.set(e.payload));
-    const status = listen<StreamStatus>('stream_status', (e) => streamStatus.set(e.payload));
+    const status = listen<StreamStatus>('stream_status', (e) => {
+      streamStatus.set(e.payload);
+      if (e.payload.state === 'connecting' || e.payload.state === 'disconnected') {
+        streamStats.set({ kbps: 0, total_bytes: 0 });
+      }
+    });
+    const stats = listen<StreamStats>('stream_stats', (e) => streamStats.set(e.payload));
     const rec = listen<RecordingStatus>('recording_status', (e) => {
       const s = e.payload;
       if (s.state === 'recording') {
@@ -122,6 +129,7 @@
       lvl.then((u) => u());
       pos.then((u) => u());
       status.then((u) => u());
+      stats.then((u) => u());
       rec.then((u) => u());
       err.then((u) => u());
       wv2.then((u) => u());
