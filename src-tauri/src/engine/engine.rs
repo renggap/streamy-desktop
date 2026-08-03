@@ -98,6 +98,69 @@ impl EngineState {
             &mut self.deck_b
         }
     }
+
+    /// Render one output buffer: decks → EQ → crossfade → duck → monitor/broadcast
+    /// buses → write to `out`. Pushes to broadcast_tx / record_tx / meter.
+    /// Pure DSP; no events, no locks beyond caller-held.
+    ///
+    /// `channels` is the output device channel count (e.g. 2 for stereo).
+    /// `out` is partitioned into frames of `channels` samples; `write_frame`
+    /// handles mono/2ch/Nch expansion per frame.
+    fn render_buffer(&mut self, out: &mut [f32], channels: usize) {
+        let sends = sends_for(self.source_mode);
+        for frame in out.chunks_mut(channels.max(1)) {
+            // Two decks -> per-deck EQ -> equal-power crossfade.
+            let raw_a = self.deck_a.next_frame();
+            let raw_b = self.deck_b.next_frame();
+            let a = self.eq_a.process(raw_a);
+            let b = self.eq_b.process(raw_b);
+            let diff = self.crossfade_target - self.crossfade;
+            if diff.abs() <= self.fade_step {
+                self.crossfade = self.crossfade_target;
+            } else {
+                self.crossfade += self.fade_step * diff.signum();
+            }
+            let (ga, gb) = equal_power(self.crossfade);
+            let deck_frame = [a[0] * ga + b[0] * gb, a[1] * ga + b[1] * gb];
+
+            // Mic auto-duck: track music RMS, ease the duck gain.
+            let inst = ((deck_frame[0] * deck_frame[0] + deck_frame[1] * deck_frame[1]) * 0.5)
+                .sqrt();
+            self.music_rms += DUCK_SMOOTH * (inst - self.music_rms);
+            let mic_frame = self.mic_cons.pop().unwrap_or([0.0, 0.0]);
+            let target_duck = if self.duck_enabled {
+                duck_gain(self.music_rms, self.duck_threshold, self.duck_depth_db)
+            } else {
+                1.0
+            };
+            self.duck_gain += DUCK_SMOOTH * (target_duck - self.duck_gain);
+            let mic_out = [
+                mic_frame[0] * self.duck_gain,
+                mic_frame[1] * self.duck_gain,
+            ];
+
+            let mon = mix_bus(
+                &[deck_frame, mic_out],
+                &[sends.decks_monitor, sends.mic_monitor],
+            );
+            let bcast = mix_bus(
+                &[deck_frame, mic_out],
+                &[sends.decks_broadcast, sends.mic_broadcast],
+            );
+            // Master gain on the final mix (monitor + broadcast alike).
+            let g = self.volume;
+            let mon = [mon[0] * g, mon[1] * g];
+            let bcast = [bcast[0] * g, bcast[1] * g];
+            if let Some(tx) = self.broadcast_tx.as_mut() {
+                let _ = tx.push(bcast);
+            }
+            if let Some(tx) = self.record_tx.as_mut() {
+                let _ = tx.push(bcast);
+            }
+            self.meter.push(mon, mic_out);
+            write_frame(frame, mon[0], mon[1]);
+        }
+    }
 }
 
 /// Send + `Sync` handle to the audio backend.
@@ -389,56 +452,8 @@ fn build_output_stream(
                             Action::SetVolume(v) => s.volume = v.clamp(0.0, 2.0),
                         }
                     }
-                    // 2. Produce + meter frames.
-                    let sends = sends_for(s.source_mode);
-                    for frame in out.chunks_mut(channels.max(1)) {
-                        // Two decks -> per-deck EQ -> equal-power crossfade.
-                        let raw_a = s.deck_a.next_frame();
-                        let raw_b = s.deck_b.next_frame();
-                        let a = s.eq_a.process(raw_a);
-                        let b = s.eq_b.process(raw_b);
-                        let diff = s.crossfade_target - s.crossfade;
-                        if diff.abs() <= s.fade_step {
-                            s.crossfade = s.crossfade_target;
-                        } else {
-                            s.crossfade += s.fade_step * diff.signum();
-                        }
-                        let (ga, gb) = equal_power(s.crossfade);
-                        let deck_frame = [a[0] * ga + b[0] * gb, a[1] * ga + b[1] * gb];
-
-                        // Mic auto-duck: track music RMS, ease the duck gain.
-                        let inst = ((deck_frame[0] * deck_frame[0] + deck_frame[1] * deck_frame[1]) * 0.5).sqrt();
-                        s.music_rms += DUCK_SMOOTH * (inst - s.music_rms);
-                        let mic_frame = s.mic_cons.pop().unwrap_or([0.0, 0.0]);
-                        let target_duck = if s.duck_enabled {
-                            duck_gain(s.music_rms, s.duck_threshold, s.duck_depth_db)
-                        } else {
-                            1.0
-                        };
-                        s.duck_gain += DUCK_SMOOTH * (target_duck - s.duck_gain);
-                        let mic_out = [mic_frame[0] * s.duck_gain, mic_frame[1] * s.duck_gain];
-
-                        let mon = mix_bus(
-                            &[deck_frame, mic_out],
-                            &[sends.decks_monitor, sends.mic_monitor],
-                        );
-                        let bcast = mix_bus(
-                            &[deck_frame, mic_out],
-                            &[sends.decks_broadcast, sends.mic_broadcast],
-                        );
-                        // Master gain on the final mix (monitor + broadcast alike).
-                        let g = s.volume;
-                        let mon = [mon[0] * g, mon[1] * g];
-                        let bcast = [bcast[0] * g, bcast[1] * g];
-                        if let Some(tx) = s.broadcast_tx.as_mut() {
-                            let _ = tx.push(bcast);
-                        }
-                        if let Some(tx) = s.record_tx.as_mut() {
-                            let _ = tx.push(bcast);
-                        }
-                        s.meter.push(mon, mic_out);
-                        write_frame(frame, mon[0], mon[1]);
-                    }
+                    // 2. Render the output buffer: per-frame DSP loop.
+                    s.render_buffer(out, channels);
                     let levels = s.meter.take();
                     let pos = levels
                         .is_some()
@@ -477,4 +492,84 @@ fn build_output_stream(
         )
         .map_err(|e| e.to_string())?;
     Ok(stream)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture() -> &'static str {
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/tone-60s.mp3")
+    }
+
+    fn state_with_rings() -> (EngineState, rtrb::Consumer<[f32; 2]>, rtrb::Consumer<[f32; 2]>) {
+        let mut s = EngineState {
+            deck_a: Deck::new(),
+            deck_b: Deck::new(),
+            active: 0,
+            crossfade: 0.0,
+            crossfade_target: 0.0,
+            fade_step: 1.0 / (0.4 * 44100.0),
+            eq_a: Eq3Band::new(44100.0),
+            eq_b: Eq3Band::new(44100.0),
+            duck_enabled: false,
+            duck_threshold: 0.15,
+            duck_depth_db: 12.0,
+            music_rms: 0.0,
+            duck_gain: 1.0,
+            volume: 1.0,
+            meter: Meter::new(44100),
+            source_mode: SourceMode::Both,
+            cons: rtrb::RingBuffer::new(8).1,
+            mic_cons: rtrb::RingBuffer::new(8).1,
+            broadcast_tx: None,
+            record_tx: None,
+        };
+        s.deck_a.open(fixture(), 44100).unwrap();
+        s.deck_a.playing = true;
+        let (btx, brx) = rtrb::RingBuffer::<[f32; 2]>::new(8192);
+        let (rtx, rrx) = rtrb::RingBuffer::<[f32; 2]>::new(8192);
+        s.broadcast_tx = Some(btx);
+        s.record_tx = Some(rtx);
+        (s, brx, rrx)
+    }
+
+    #[test]
+    fn render_pushes_tone_to_broadcast_and_record_rings() {
+        let (mut s, mut brx, mut rrx) = state_with_rings();
+        let mut buf = vec![0.0f32; 8192];
+        s.render_buffer(&mut buf, 2);
+        let (mut bmax, mut rmax) = (0.0f32, 0.0f32);
+        while let Ok(f) = brx.pop() {
+            bmax = bmax.max(f[0].abs()).max(f[1].abs());
+        }
+        while let Ok(f) = rrx.pop() {
+            rmax = rmax.max(f[0].abs()).max(f[1].abs());
+        }
+        assert!(bmax > 0.1, "broadcast ring silent, max={bmax}");
+        assert!(rmax > 0.1, "record ring silent, max={rmax}");
+    }
+
+    #[test]
+    fn file_mode_mutes_mic_on_broadcast_but_keeps_monitor() {
+        let (mut s, mut brx, _rrx) = state_with_rings();
+        s.source_mode = SourceMode::File;
+        // Put a loud frame in the mic ring.
+        let (mut mtx, mr) = rtrb::RingBuffer::<[f32; 2]>::new(8);
+        mtx.push([0.9, 0.9]).unwrap();
+        s.mic_cons = mr;
+        let mut buf = vec![0.0f32; 8192];
+        s.render_buffer(&mut buf, 2);
+        let mut bmax = 0.0f32;
+        while let Ok(f) = brx.pop() {
+            bmax = bmax.max(f[0].abs()).max(f[1].abs());
+        }
+        // Broadcast carries only the tone deck (~0.9 peak at its loudest), not
+        // mic + tone summed. The <= 0.95 bound depends on the fixture being
+        // below 0 dBFS (safe for the sine-tone fixture).
+        assert!(
+            bmax <= 0.95 && bmax > 0.1,
+            "broadcast should be tone-only, max={bmax}"
+        );
+    }
 }
