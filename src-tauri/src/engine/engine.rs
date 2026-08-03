@@ -41,6 +41,23 @@ enum Signal {
     Shutdown,
 }
 
+// LOCKING DISCIPLINE (audio callback safety):
+// - The output callback holds `state` for the whole buffer. Event emission
+//   normally happens after the guard drops (levels/position/ended), with ONE
+//   documented exception: a failed Action::Load emits an error event while the
+//   lock is still held (rare, non-realtime path).
+// - `state` is mutated from outside the callback only by O(1) field swaps:
+//   set_broadcast_producer / set_record_producer / output_rate and the
+//   audio_loop rate updates. The per-frame DSP loop does no I/O, no
+//   allocation, and no network.
+// - Action::Load is the one I/O exception: deck.open probes the file
+//   (format sniff + metadata) under the lock. It is a rare user action, not
+//   per-buffer work.
+// - parking_lot::Mutex is non-poisoning: a panic in the callback releases the
+//   lock and the next command succeeds instead of wedging the engine.
+// - mic input is a separate ring; its producer mutex is never held while
+//   pushing the output stream.
+
 /// All realtime state, shared across stream rebuilds so a device hot-swap
 /// (headphone unplug) can rebuild the stream without losing playback.
 struct EngineState {
@@ -89,7 +106,7 @@ pub struct AudioEngine {
     sig: mpsc::Sender<Signal>,
     app: Arc<Mutex<Option<AppHandle>>>,
     mic: MicInput,
-    state: Arc<Mutex<EngineState>>,
+    state: Arc<parking_lot::Mutex<EngineState>>,
     /// Chosen output device name (None = system default). Drives stream rebuilds.
     output_device: Arc<Mutex<Option<String>>>,
 }
@@ -104,7 +121,7 @@ impl AudioEngine {
         let (sig_tx, sig_rx) = mpsc::channel::<Signal>();
         let app: Arc<Mutex<Option<AppHandle>>> = Arc::new(Mutex::new(None));
         let output_device: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-        let state = Arc::new(Mutex::new(EngineState {
+        let state = Arc::new(parking_lot::Mutex::new(EngineState {
             deck_a: Deck::new(),
             deck_b: Deck::new(),
             active: 0,
@@ -203,24 +220,19 @@ impl AudioEngine {
 
     /// Install/remove the broadcast-bus producer the callback pushes to.
     pub fn set_broadcast_producer(&self, tx: Option<rtrb::Producer<[f32; 2]>>) {
-        if let Ok(mut s) = self.state.lock() {
-            s.broadcast_tx = tx;
-        }
+        let mut s = self.state.lock();
+        s.broadcast_tx = tx;
     }
 
     /// Install/remove the record-bus producer (PCM tap of the broadcast mix).
     pub fn set_record_producer(&self, tx: Option<rtrb::Producer<[f32; 2]>>) {
-        if let Ok(mut s) = self.state.lock() {
-            s.record_tx = tx;
-        }
+        let mut s = self.state.lock();
+        s.record_tx = tx;
     }
 
     /// Current output device sample rate (broadcast PCM is at this rate).
     pub fn output_rate(&self) -> u32 {
-        self.state
-            .lock()
-            .map(|s| s.meter.rate())
-            .unwrap_or(FALLBACK_RATE)
+        self.state.lock().meter.rate()
     }
 }
 
@@ -237,7 +249,7 @@ impl Drop for AudioEngine {
 }
 
 fn audio_loop(
-    state: Arc<Mutex<EngineState>>,
+    state: Arc<parking_lot::Mutex<EngineState>>,
     app: Arc<Mutex<Option<AppHandle>>>,
     output_device: Arc<Mutex<Option<String>>>,
     sig_tx: mpsc::Sender<Signal>,
@@ -247,7 +259,8 @@ fn audio_loop(
         let wanted = output_device.lock().ok().and_then(|g| g.clone());
         let cfg = current_output_cfg(&wanted);
         // Adapt meter window + deck resample step to this device's rate.
-        if let Ok(mut s) = state.lock() {
+        {
+            let mut s = state.lock();
             s.meter.set_sample_rate(cfg.sample_rate.0);
             s.deck_a.set_device_rate(cfg.sample_rate.0);
             s.deck_b.set_device_rate(cfg.sample_rate.0);
@@ -321,7 +334,7 @@ fn write_frame(buf: &mut [f32], l: f32, r: f32) {
 }
 
 fn build_output_stream(
-    state: Arc<Mutex<EngineState>>,
+    state: Arc<parking_lot::Mutex<EngineState>>,
     app: Arc<Mutex<Option<AppHandle>>>,
     sig_tx: mpsc::Sender<Signal>,
     cfg: &StreamConfig,
@@ -337,10 +350,7 @@ fn build_output_stream(
             cfg,
             move |out: &mut [f32], _: &cpal::OutputCallbackInfo| {
                 let (levels, pos, ended) = {
-                    let mut s = match state.lock() {
-                        Ok(g) => g,
-                        Err(_) => return,
-                    };
+                    let mut s = state.lock();
                     // 1. Drain control queue.
                     while let Ok(action) = s.cons.pop() {
                         match action {

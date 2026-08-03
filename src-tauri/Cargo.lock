@@ -3482,6 +3482,7 @@ dependencies = [
  "keyring",
  "lofty",
  "log",
+ "parking_lot",
  "rayon",
  "reqwest 0.12.28",
  "rtrb",
