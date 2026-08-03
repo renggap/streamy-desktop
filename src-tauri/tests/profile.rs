@@ -78,3 +78,62 @@ fn delete_missing_errors() {
     assert!(s.delete("nope").is_err());
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn keyring_path_used_when_enabled() {
+    let dir = std::env::temp_dir().join(format!(
+        "streamy-profile-test-{}-keyring",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = ProfileStore::new_with_keyring(dir.clone());
+    store.save(sample("kr"), Some("sekrit".to_string())).unwrap();
+
+    // Inspect profiles.json on disk via JSON parse — avoids false positives
+    // from substring matching on other keys.
+    let raw = std::fs::read_to_string(dir.join("profiles.json")).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    let keyring_used = json[0].get("plaintext_pw").is_none();
+
+    if keyring_used {
+        // Keyring stored the password; JSON has no plaintext_pw key.
+        // get_password should succeed via keyring. On systems where keyring
+        // set-verify succeeds at save time (this test's save already handles
+        // the round-trip), read-back should also work.
+        assert_eq!(store.get_password("kr").unwrap(), "sekrit");
+    } else {
+        // Keyring unavailable (e.g. headless CI); plaintext fallback in JSON.
+        assert_eq!(
+            json[0]["plaintext_pw"].as_str().unwrap(),
+            "sekrit"
+        );
+        assert_eq!(store.get_password("kr").unwrap(), "sekrit");
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn delete_cleans_keyring_best_effort() {
+    let dir = std::env::temp_dir().join(format!(
+        "streamy-profile-test-{}-keyring-del",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = ProfileStore::new_with_keyring(dir.clone());
+    store.save(sample("kr"), Some("sekrit".to_string())).unwrap();
+    assert_eq!(store.list().len(), 1);
+
+    // Delete must remove the profile from the JSON file even if keyring
+    // delete fails (headless CI). The keyring cleanup is best-effort.
+    store.delete("kr").unwrap();
+    assert!(store.list().is_empty());
+    // Confirm the JSON file is empty/cleared.
+    let raw = std::fs::read_to_string(dir.join("profiles.json")).unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&raw).unwrap(),
+        serde_json::json!([])
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}

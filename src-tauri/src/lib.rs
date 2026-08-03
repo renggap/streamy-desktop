@@ -79,7 +79,7 @@ pub fn run() {
             app.state::<engine::engine::AudioEngine>()
                 .set_app(app.handle().clone());
             // Connection-profile + settings stores in the OS app-data dir.
-            app.manage(ProfileStore::new(data_dir.clone()));
+            app.manage(ProfileStore::new_with_keyring(data_dir.clone()));
             app.manage(settings::SettingsStore::new(data_dir.clone()));
 
             // Restore the last-used mic input device.

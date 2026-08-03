@@ -29,10 +29,11 @@ pub struct ConnectionProfile {
     pub plaintext_pw: Option<String>,
 }
 
-/// JSON-backed profile store. Passwords are stored as plaintext in the JSON
-/// (in the OS app-data dir, user-private). The OS keyring path was unreliable
-/// across save/get on Windows (set succeeded, get failed), so plaintext is the
-/// default; keyring code is retained but gated off.
+/// JSON-backed profile store. Prefers the OS keyring for passwords;
+/// falls back to plaintext in the JSON file when the keyring is unavailable
+/// (headless CI, missing keyring backend). `get_password` checks keyring
+/// first, then plaintext, so a keyring that works at save time but fails at
+/// read time is still covered.
 pub struct ProfileStore {
     dir: PathBuf,
     use_keyring: bool,
@@ -40,10 +41,7 @@ pub struct ProfileStore {
 
 impl ProfileStore {
     pub fn new(dir: PathBuf) -> Self {
-        Self {
-            dir,
-            use_keyring: false,
-        }
+        Self::new_no_keyring(dir)
     }
 
     /// Test instance that skips the keyring (exercises the plaintext path).
@@ -51,6 +49,13 @@ impl ProfileStore {
         Self {
             dir,
             use_keyring: false,
+        }
+    }
+
+    pub fn new_with_keyring(dir: PathBuf) -> Self {
+        Self {
+            dir,
+            use_keyring: true,
         }
     }
 
@@ -87,11 +92,34 @@ impl ProfileStore {
     pub fn save(&self, mut profile: ConnectionProfile, password: Option<String>) -> Result<(), String> {
         match password {
             Some(pw) => {
-                let stored_in_keyring = self.use_keyring
-                    && keyring::Entry::new(KEYRING_SERVICE, &profile.name)
-                        .and_then(|e| e.set_password(&pw))
-                        .is_ok();
-                profile.plaintext_pw = if stored_in_keyring { None } else { Some(pw) };
+                let keyring_ok = if self.use_keyring {
+                    keyring::Entry::new(KEYRING_SERVICE, &profile.name)
+                        .ok()
+                        .and_then(|e| {
+                            e.set_password(&pw).ok()?;
+                            // Verify with a fresh Entry: historical Windows bug
+                            // where set succeeds but a later get returns nothing.
+                            let verify = keyring::Entry::new(KEYRING_SERVICE, &profile.name)
+                                .ok()?
+                                .get_password()
+                                .ok()?;
+                            (verify == pw).then_some(())
+                        })
+                        .is_some()
+                } else {
+                    false
+                };
+                if keyring_ok {
+                    profile.plaintext_pw = None;
+                } else {
+                    if self.use_keyring {
+                        crate::diag::log(format!(
+                            "profile '{}': OS keyring unavailable, storing password in plaintext",
+                            profile.name
+                        ));
+                    }
+                    profile.plaintext_pw = Some(pw);
+                }
             }
             None => {
                 // Keep whatever password is already stored.
