@@ -92,6 +92,39 @@ fn spawn_producer(mut tx: rtrb::Producer<[f32; 2]>, stop: Arc<AtomicBool>) {
     });
 }
 
+/// P2.2 regression: an encoder build failure must surface from `start` as an
+/// Err — never a silently-dead encoder thread (UI showed ON AIR with zero
+/// audio). An invalid bitrate fails `Mp3Encoder::new`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn encoder_init_failure_surfaces_as_error() {
+    let (_, rx) = rtrb::RingBuffer::<[f32; 2]>::new(8192);
+    let enc = EncoderConfig {
+        sample_rate: 44100,
+        channels: 2,
+        bitrate_kbps: 999, // invalid -> Mp3Encoder::new errors
+        codec: Codec::Mp3,
+    };
+    let err = match broadcast::start_with_opts(
+        rx,
+        broadcast::StreamConfig::Ultravox(cfg(1)),
+        enc,
+        None,
+        Duration::from_millis(150),
+        Duration::from_millis(600),
+        5,
+    )
+    .await
+    {
+        Ok(_) => panic!("encoder init failure must surface as Err, not silent success"),
+        Err(e) => e,
+    };
+
+    assert!(
+        err.contains("bitrate") || err.contains("lame") || err.contains("encoder"),
+        "error should reference the codec/bitrate failure, got: {err}"
+    );
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn reconnects_with_backoff_after_drops() {
     let drops = 2;

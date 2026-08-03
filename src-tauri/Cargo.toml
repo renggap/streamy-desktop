@@ -19,6 +19,7 @@ tauri-build = { version = "2.6.3" }
 cc = "1"
 
 [features]
+default = ["aac"]
 aac = ["fdk-aac"]
 
 [dependencies]

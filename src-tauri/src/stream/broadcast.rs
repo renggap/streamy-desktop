@@ -130,6 +130,17 @@ pub async fn start_with_opts(
 ) -> Result<BroadcastHandle, String> {
     emit_status(&app, StreamStatus::Connecting);
 
+    // Build the encoder up front: a codec init failure (e.g. fdk-aac not
+    // available) must surface to the caller instead of silently killing the
+    // encoder thread after the UI already shows ON AIR with zero audio.
+    let enc = match encode::build(&enc_cfg) {
+        Ok(e) => e,
+        Err(e) => {
+            emit_status(&app, StreamStatus::Error { message: e.clone() });
+            return Err(e);
+        }
+    };
+
     // Initial connect: failure here is returned to the caller (Connect button
     // shows it). Mid-stream drops are handled by the reconnect loop below.
     let mut cfg = cfg;
@@ -165,15 +176,13 @@ pub async fn start_with_opts(
     let (mp3_tx, mut mp3_rx) = mpsc::channel::<Vec<u8>>(64);
     let (metadata_tx, mut metadata_rx) = mpsc::channel::<String>(16);
 
-    // Encoder thread: ring -> lame -> MP3 chunks (paced by realtime producer).
-    // During a reconnect the channel fills and blocking_send backpressures this
-    // thread (and in turn the audio ring) — a brief pause, not a stall.
+    // Encoder thread: ring -> encoder -> MP3/AAC chunks (paced by realtime
+    // producer). During a reconnect the channel fills and blocking_send
+    // backpressures this thread (and in turn the audio ring) — a brief pause,
+    // not a stall. The encoder was built above so init failures are surfaced.
     let stop_enc = stop.clone();
     std::thread::spawn(move || {
-        let mut enc = match encode::build(&enc_cfg) {
-            Ok(e) => e,
-            Err(_) => return,
-        };
+        let mut enc = enc;
         let mut buf: Vec<f32> = Vec::with_capacity(ENCODE_FRAMES * 2);
         loop {
             if stop_enc.load(Ordering::Relaxed) {
