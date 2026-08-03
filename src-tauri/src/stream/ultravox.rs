@@ -238,6 +238,16 @@ mod tests {
     }
 
     #[test]
+    fn xtea_multiblock_vectors() {
+        // Independent cross-language vectors (Python reference impl).
+        assert_eq!(xtea_encipher_hex(b"0123456789abcdef", b"key"), "f88e91fd16781ccc3c2179618d1f0e73");
+        assert_eq!(xtea_encipher_hex(b"0123456789abcdefghijklmn", b"secretkey"), "2c4b6945e9051931c98804142a064a27d2a7a1d6327c3ff0");
+        assert_eq!(xtea_encipher_hex("pässwörd".as_bytes(), b"1234"), "89393495b864a76553db9412d1b31799");
+        assert_eq!(xtea_encipher_hex(b"password", b"this-is-a-very-long-key-over-16-bytes"), "a6e178953174cb08");
+        assert_eq!(xtea_encipher_hex(b"liverelay1234", b""), "53b52f6722513f7d9a871496cc6a58a8");
+    }
+
+    #[test]
     fn auth_payload_source_login_has_empty_uid() {
         // No DJ userid -> empty field between sid and password (source login).
         let p = auth_payload(1, "", "deadbeef");
