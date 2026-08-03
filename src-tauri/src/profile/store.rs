@@ -4,13 +4,6 @@ use std::path::PathBuf;
 
 const KEYRING_SERVICE: &str = "streamy-desktop";
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Protocol {
-    Icy,
-    Ultravox,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ConnectionProfile {
     pub name: String,
@@ -18,7 +11,6 @@ pub struct ConnectionProfile {
     pub port: u16,
     pub user: String,
     pub mount: String,
-    pub protocol: Protocol,
     pub stream_id: u32,
     pub station_name: String,
     pub genre: String,

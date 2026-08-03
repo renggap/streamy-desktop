@@ -14,7 +14,6 @@
       port: 8000,
       user: '',
       mount: '/',
-      protocol: 'ultravox',
       stream_id: 1,
       station_name: 'Streamy',
       genre: '',

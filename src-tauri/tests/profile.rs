@@ -1,4 +1,4 @@
-use streamy_desktop::profile::store::{ConnectionProfile, ProfileStore, Protocol};
+use streamy_desktop::profile::store::{ConnectionProfile, ProfileStore};
 use std::fs;
 
 fn tmp_store(tag: &str) -> (ProfileStore, std::path::PathBuf) {
@@ -18,7 +18,6 @@ fn sample(name: &str) -> ConnectionProfile {
         port: 8000,
         user: "source".into(),
         mount: "/stream".into(),
-        protocol: Protocol::Icy,
         stream_id: 1,
         station_name: "Streamy".into(),
         genre: "Misc".into(),
@@ -77,6 +76,17 @@ fn delete_missing_errors() {
     let (s, dir) = tmp_store("delete");
     assert!(s.delete("nope").is_err());
     fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn profile_roundtrips_without_protocol_field() {
+    let (s, dir) = tmp_store("noprotocol");
+    let p = sample("np");
+    s.save(p, Some("pw".to_string())).unwrap();
+    let list = s.list();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].name, "np");
+    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]

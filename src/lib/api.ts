@@ -75,7 +75,6 @@ export interface ConnectionProfile {
   port: number;
   user: string;
   mount: string;
-  protocol: 'icy' | 'ultravox';
   stream_id: number;
   station_name: string;
   genre: string;
