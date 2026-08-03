@@ -181,3 +181,49 @@ async fn broadcast_ring_drives_server_live() {
     assert!(live, "server did not report the stream as live");
     assert!(title_ok, "SONGTITLE not updated");
 }
+
+// --- Local validation (run by default, no server needed) ---
+//
+// These prove the confirmation pipeline in `stream_and_verify_live` works:
+// `server_bitrate` correctly parses a DNAS /stats response, and `http_get`
+// fetches one over real TCP. Together they let the user trust the
+// `configured=… server_reported=…` line when comparing against their DNAS.
+
+#[test]
+fn server_bitrate_parses_dnas_stats() {
+    // Realistic DNASv2 /stats?sid=1 snippet (AAC-LC table artifact: server
+    // rounds a 24kbps source up to 32).
+    let stats = "\
+<STREAMSTATUS>1</STREAMSTATUS>\n\
+<BITRATE>32</BITRATE>\n\
+<STREAMS>1</STREAMS>\n\
+<SONGTITLE>t</SONGTITLE>\n";
+    assert_eq!(server_bitrate(stats), "32");
+
+    // Absent element -> "?" (server didn't report a rate).
+    assert_eq!(server_bitrate("<STREAMSTATUS>1</STREAMSTATUS>"), "?");
+}
+
+#[tokio::test]
+async fn http_get_fetches_dnas_stats_over_tcp() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        let (mut s, _) = listener.accept().await.unwrap();
+        // Read the request head (bounded) so we respond like a real DNAS:
+        // HTTP/1.0 servers reply without waiting for EOF on the connection.
+        let mut buf = [0u8; 4096];
+        let _ = s.read(&mut buf).await.unwrap();
+        let body = "<STREAMSTATUS>1</STREAMSTATUS><BITRATE>32</BITRATE>";
+        let head = format!(
+            "HTTP/1.0 200 OK\r\nContent-Type: text/xml\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        );
+        s.write_all(head.as_bytes()).await.unwrap();
+        s.write_all(body.as_bytes()).await.unwrap();
+    });
+
+    let stats = http_get("127.0.0.1", port, "/stats?sid=1").await;
+    assert!(stats.contains("<BITRATE>32</BITRATE>"));
+    assert_eq!(server_bitrate(&stats), "32");
+}
