@@ -135,58 +135,8 @@ impl Drop for Mp3Encoder {
     }
 }
 pub fn encode(samples: &[f32], cfg: &EncoderConfig) -> Result<Vec<u8>, String> {
-    bitrate_from_kbps(cfg.bitrate_kbps)?;
-
-    // Normalize to interleaved stereo.
-    let stereo: Vec<f32> = match cfg.channels {
-        1 => samples.iter().flat_map(|&s| [s, s]).collect(),
-        _ => samples.to_vec(),
-    };
-    let pcm: Vec<i16> = stereo
-        .iter()
-        .map(|&s| (s.clamp(-1.0, 1.0) * 32767.0) as i16)
-        .collect();
-    let num_samples = (pcm.len() / 2) as c_int; // frames
-
-    unsafe {
-        let gfp = lame_init();
-        if gfp.is_null() {
-            return Err("lame_init failed".to_string());
-        }
-
-        let result = (|| -> Result<Vec<u8>, String> {
-            check(lame_set_num_channels(gfp, 2))?;
-            check(lame_set_in_samplerate(gfp, cfg.sample_rate as c_int))?;
-            check(lame_set_brate(gfp, cfg.bitrate_kbps as c_int))?;
-            check(lame_init_params(gfp))?;
-
-            let bufsize = ((num_samples as f64) * 1.25 + 7200.0) as usize + 16;
-            let mut buf = vec![0u8; bufsize];
-            let mut out = Vec::new();
-
-            if num_samples > 0 {
-                let n = lame_encode_buffer_interleaved(
-                    gfp,
-                    pcm.as_ptr(),
-                    num_samples,
-                    buf.as_mut_ptr(),
-                    bufsize as c_int,
-                );
-                if n < 0 {
-                    return Err(format!("lame_encode error {n}"));
-                }
-                out.extend_from_slice(&buf[..n as usize]);
-            }
-
-            let n = lame_encode_flush(gfp, buf.as_mut_ptr(), bufsize as c_int);
-            if n < 0 {
-                return Err(format!("lame_flush error {n}"));
-            }
-            out.extend_from_slice(&buf[..n as usize]);
-            Ok(out)
-        })();
-
-        lame_close(gfp);
-        result
-    }
+    let mut enc = Mp3Encoder::new(cfg)?;
+    let mut out = enc.encode(samples)?;
+    out.extend_from_slice(&enc.flush()?);
+    Ok(out)
 }
