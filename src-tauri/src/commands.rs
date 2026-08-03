@@ -385,11 +385,38 @@ pub async fn disconnect_stream(
     Ok(())
 }
 
+/// Cap a stream title at 200 chars without splitting UTF-8.
+pub fn clamp_title(title: String) -> String {
+    if title.chars().count() <= 200 {
+        return title;
+    }
+    title.chars().take(200).collect()
+}
+
+/// Cheap sanity check: does this look like a Windows PE executable?
+/// Verifies the MZ header and the PE\0\0 signature at the e_lfanew offset.
+pub fn looks_like_pe_exe(bytes: &[u8]) -> bool {
+    if bytes.len() < 2 || bytes[0] != b'M' || bytes[1] != b'Z' {
+        return false;
+    }
+    // Read e_lfanew at 0x3C (u32 LE) — the offset to the PE signature.
+    if bytes.len() < 64 {
+        return false;
+    }
+    let off = u32::from_le_bytes([bytes[0x3C], bytes[0x3D], bytes[0x3E], bytes[0x3F]]) as usize;
+    // Bounds-check: the 4-byte PE signature must fit.
+    if off + 4 > bytes.len() {
+        return false;
+    }
+    &bytes[off..off + 4] == b"PE\0\0"
+}
+
 #[tauri::command]
 pub async fn set_stream_title(
     title: String,
     bcast: State<'_, Mutex<Option<BroadcastHandle>>>,
 ) -> Result<(), String> {
+    let title = clamp_title(title);
     // Pull what we need under a brief lock; never await while holding it (the
     // Icecast metadata round-trip can take up to its 5s timeout).
     let (ice_admin, uvox_tx) = {
@@ -600,12 +627,38 @@ pub async fn repair_webview2(app: AppHandle) -> Result<String, String> {
         );
     }
 
-    let out = std::env::temp_dir().join("streamy-webview2-setup.exe");
+    // Integrity check: bail early if the response is not a PE executable.
+    if !looks_like_pe_exe(&buf) {
+        return Err("downloaded file is not a Windows executable".into());
+    }
+
+    // Unique path per call: PID + timestamp avoid races with concurrent
+    // repairs or a still-sleeping cleanup thread from a prior invocation.
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let out = std::env::temp_dir().join(format!(
+        "streamy-webview2-setup-{}-{}.exe",
+        std::process::id(),
+        ts
+    ));
     std::fs::write(&out, &buf).map_err(|e| e.to_string())?;
     std::process::Command::new(&out)
         .spawn()
         .map_err(|e| format!("failed to launch installer: {e}"))?;
     let path = out.to_string_lossy().into_owned();
     diag::log(format!("repair_webview2 -> launched {path}"));
+
+    // Best-effort cleanup after the installer UI finishes.
+    // The 120 s grace period is generous — the Microsoft bootstrapper
+    // typically completes (or fails) within 30–60 s.  If we race the
+    // installer, the next repair call simply re-downloads the file.
+    let out2 = out.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(120));
+        let _ = std::fs::remove_file(&out2);
+    });
+
     Ok(path)
 }
