@@ -24,7 +24,7 @@ use tokio::task::JoinHandle;
 
 use crate::diag;
 use crate::encode::{self, EncoderConfig};
-use crate::events;
+use crate::events::{self, StreamStats};
 use crate::stream::icy::IcySourceConfig;
 use crate::stream::ultravox::{self, UltravoxConfig};
 
@@ -210,11 +210,22 @@ pub async fn start_with_opts(
     // reconnect with growing backoff and resume.
     let stop_str = stop.clone();
     let streamer = tokio::spawn(async move {
+        // Per-session upload counter: fresh per start_with_opts, survives
+        // reconnects (run_stream accumulates into it between drops).
+        let mut total_bytes = 0u64;
         loop {
             if stop_str.load(Ordering::Relaxed) {
                 break;
             }
-            let dropped = run_stream(&mut source, &mut mp3_rx, &mut metadata_rx, &stop_str).await;
+            let dropped = run_stream(
+                &mut source,
+                &mut mp3_rx,
+                &mut metadata_rx,
+                &stop_str,
+                &app,
+                &mut total_bytes,
+            )
+            .await;
             if stop_str.load(Ordering::Relaxed) {
                 break;
             }
@@ -261,20 +272,32 @@ pub async fn start_with_opts(
 
 /// Stream until the socket errors (returns `true` → caller reconnects) or stop is
 /// requested / the encoder dropped its sender (returns `false`). Icecast
-/// metadata failures are logged but do not tear down the audio socket.
+/// metadata failures are logged but do not tear down the audio socket. Emits
+/// per-second upload stats (`stream_stats`) while streaming; `total_bytes` is
+/// the per-session counter shared with the caller across reconnects.
 async fn run_stream(
     source: &mut Source,
     mp3_rx: &mut mpsc::Receiver<Vec<u8>>,
     metadata_rx: &mut mpsc::Receiver<String>,
     stop: &Arc<AtomicBool>,
+    app: &Option<AppHandle>,
+    total_bytes: &mut u64,
 ) -> bool {
+    let mut last_bytes = 0u64;
+    let mut ticker = tokio::time::interval(Duration::from_secs(1));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         if stop.load(Ordering::Relaxed) {
             return false;
         }
         tokio::select! {
+            _ = ticker.tick() => {
+                emit_stats(app, *total_bytes, last_bytes);
+                last_bytes = *total_bytes;
+            },
             chunk = mp3_rx.recv() => match chunk {
                 Some(c) => {
+                    *total_bytes += c.len() as u64;
                     if source.send_audio(&c).await.is_err() {
                         return true;
                     }
@@ -394,6 +417,22 @@ fn emit_status(app: &Option<AppHandle>, status: StreamStatus) {
     }
 }
 
+fn kbps_from_delta(bytes: u64) -> f64 {
+    (bytes * 8) as f64 / 1000.0
+}
+
+fn emit_stats(app: &Option<AppHandle>, total_bytes: u64, last_bytes: u64) {
+    if let Some(a) = app {
+        let _ = a.emit(
+            events::STREAM_STATS,
+            StreamStats {
+                kbps: kbps_from_delta(total_bytes.saturating_sub(last_bytes)),
+                total_bytes,
+            },
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -486,5 +525,14 @@ mod tests {
                 .await
                 .expect("metadata");
         }
+    }
+
+    #[test]
+    fn kbps_from_delta_is_instant_rate() {
+        // 1000 bytes in 1s = 8 kbps (1000-bit kb convention).
+        assert_eq!(kbps_from_delta(1000), 8.0);
+        assert_eq!(kbps_from_delta(0), 0.0);
+        // 16_000 bytes/s ≈ 128 kbps.
+        assert!((kbps_from_delta(16_000) - 128.0).abs() < 0.5);
     }
 }
