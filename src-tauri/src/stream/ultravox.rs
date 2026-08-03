@@ -134,6 +134,14 @@ pub fn auth_payload(stream_id: u32, user_id: &str, xtea_password_hex: &str) -> V
     format!("2.1:{stream_id}:{user_id}:{xtea_password_hex}\0").into_bytes()
 }
 
+/// Build the Ultravox 2.1 "Stream Setup" payload (message 0x1002):
+/// `<bitrate>:<bitrate>\0` (DNAS expects the source's nominal kbps).
+/// Kept as a pure helper so tests can pin the wire value to the configured
+/// bitrate — a regression here would make the DNAS display the wrong rate.
+pub fn stream_setup_payload(bitrate_kbps: u32) -> Vec<u8> {
+    format!("{bitrate_kbps}:{bitrate_kbps}\0").into_bytes()
+}
+
 /// Run the Ultravox 2.1 source handshake. On success, returns the owned
 /// `TcpStream` in data-transfer mode for streaming audio frames.
 pub async fn connect(cfg: &UltravoxConfig) -> Result<TcpStream, String> {
@@ -162,12 +170,7 @@ pub async fn connect(cfg: &UltravoxConfig) -> Result<TcpStream, String> {
     send_control(&mut s, 0x1040, asciiz(&cfg.content_type)).await?;
     expect_ack(&mut s, "mime").await?;
     // 4. Stream Setup
-    send_control(
-        &mut s,
-        0x1002,
-        asciiz(&format!("{}:{}", cfg.bitrate_kbps, cfg.bitrate_kbps)),
-    )
-    .await?;
+    send_control(&mut s, 0x1002, stream_setup_payload(cfg.bitrate_kbps)).await?;
     expect_ack(&mut s, "setup").await?;
     // 5. Stream Buffer
     send_control(&mut s, 0x1003, b"2048:2048\0".to_vec()).await?;
@@ -265,6 +268,15 @@ mod tests {
     fn frame_round_trip() {
         let f = encode_frame(0x1009, b"2.1\0");
         assert_eq!(f, vec![0x5A, 0x00, 0x10, 0x09, 0x00, 0x04, 0x32, 0x2E, 0x31, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn stream_setup_payload_is_bitrate_bitrate() {
+        // The DNAS displays this value; it must match the configured bitrate
+        // exactly (regression: 24 must never become 32 on the wire).
+        assert_eq!(stream_setup_payload(24), b"24:24\0");
+        assert_eq!(stream_setup_payload(128), b"128:128\0");
+        assert_eq!(stream_setup_payload(320), b"320:320\0");
     }
 
     #[test]
