@@ -32,6 +32,7 @@ pub enum Action {
     SetEq(f64, f64, f64),
     SetDuck(bool, f32, f32),
     SetVolume(f32),
+    SetMonitorFileGain(f32),
 }
 
 /// Signals to the audio loop: rebuild the stream (e.g. output device lost) or
@@ -78,6 +79,9 @@ struct EngineState {
     duck_gain: f32,
     /// Master output gain (1.0 = unity). Applied to the monitor + broadcast mix.
     volume: f32,
+    /// DJ's monitor-only gain for local file playback; broadcast NOT affected.
+    /// 1.0 = unity.
+    monitor_file_gain: f32,
     meter: Meter,
     source_mode: SourceMode,
     cons: rtrb::Consumer<Action>,
@@ -140,7 +144,7 @@ impl EngineState {
             ];
 
             let mon = mix_bus(
-                &[deck_frame, mic_out],
+                &[[deck_frame[0] * self.monitor_file_gain, deck_frame[1] * self.monitor_file_gain], mic_out],
                 &[sends.decks_monitor, sends.mic_monitor],
             );
             let bcast = mix_bus(
@@ -199,6 +203,7 @@ impl AudioEngine {
             music_rms: 0.0,
             duck_gain: 1.0,
             volume: 1.0,
+            monitor_file_gain: 1.0,
             meter: Meter::new(FALLBACK_RATE),
             source_mode: SourceMode::File,
             cons,
@@ -262,6 +267,11 @@ impl AudioEngine {
     /// Master output gain, 0.0..=2.0 (1.0 = unity / 100%).
     pub fn set_volume(&self, gain: f32) -> Result<(), String> {
         self.push(Action::SetVolume(gain.clamp(0.0, 2.0)))
+    }
+    /// Monitor-only gain for local file playback, 0.0..=2.0 (1.0 = unity).
+    /// Broadcast is unaffected.
+    pub fn set_monitor_file_gain(&self, gain: f32) -> Result<(), String> {
+        self.push(Action::SetMonitorFileGain(gain.clamp(0.0, 2.0)))
     }
     pub fn set_input_device(&self, name: String) -> Result<(), String> {
         self.mic.set_device(name)
@@ -450,6 +460,7 @@ fn build_output_stream(
                                 s.duck_depth_db = db;
                             }
                             Action::SetVolume(v) => s.volume = v.clamp(0.0, 2.0),
+                            Action::SetMonitorFileGain(v) => s.monitor_file_gain = v.clamp(0.0, 2.0),
                         }
                     }
                     // 2. Render the output buffer: per-frame DSP loop.
@@ -518,6 +529,7 @@ mod tests {
             music_rms: 0.0,
             duck_gain: 1.0,
             volume: 1.0,
+            monitor_file_gain: 1.0,
             meter: Meter::new(44100),
             source_mode: SourceMode::Both,
             cons: rtrb::RingBuffer::new(8).1,
@@ -571,5 +583,31 @@ mod tests {
             bmax <= 0.95 && bmax > 0.1,
             "broadcast should be tone-only, max={bmax}"
         );
+    }
+
+    #[test]
+    fn monitor_file_gain_scales_monitor_only() {
+        let (mut s, mut brx, _rrx) = state_with_rings();
+        // Both source modes send the deck to both buses at unity; file gain must
+        // only affect the monitor (out buffer), not broadcast (ring).
+        s.monitor_file_gain = 0.5;
+        let mut buf = vec![0.0f32; 8192];
+        s.render_buffer(&mut buf, 2);
+        // Monitor (buf) is halved vs. the same render at unity.
+        let mut out_max = 0.0f32;
+        for &v in &buf {
+            out_max = out_max.max(v.abs());
+        }
+        let mut bmax = 0.0f32;
+        while let Ok(f) = brx.pop() {
+            bmax = bmax.max(f[0].abs()).max(f[1].abs());
+        }
+        // The fixture is a ~0.62 peak tone. At gain 0.5 monitor should be
+        // roughly half of broadcast, which stays at the fixture's unity level.
+        assert!(
+            (bmax * 0.4..=bmax * 0.6).contains(&out_max),
+            "monitor should be roughly half of broadcast: out_max={out_max}, bmax={bmax}"
+        );
+        assert!(bmax > 0.5, "broadcast must carry significant signal, bmax={bmax}");
     }
 }
