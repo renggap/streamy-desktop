@@ -66,6 +66,16 @@ async fn http_get(host: &str, port: u16, path: &str) -> String {
     String::from_utf8_lossy(&buf).to_string()
 }
 
+/// Pull `<BITRATE>N</BITRATE>` out of a DNAS /stats XML response.
+fn server_bitrate(stats: &str) -> String {
+    stats
+        .split("<BITRATE>")
+        .nth(1)
+        .and_then(|s| s.split("</BITRATE>").next())
+        .unwrap_or("?")
+        .to_string()
+}
+
 #[tokio::test]
 #[ignore]
 async fn probe_ultravox_handshake_live() {
@@ -97,10 +107,18 @@ async fn stream_and_verify_live() {
         println!("sent second {}", sec + 1);
     }
 
-    // Ask the server for stream stats while still connected.
+    // Ask the server for stream stats while still connected. Print the
+    // configured bitrate next to what the server reports so a DNAS-side
+    // bitrate-table mismatch (e.g. AAC 24 shown as 32) is visible in one line.
     let stats = http_get(&cfg.host, cfg.port, "/stats?sid=1").await;
     println!("--- /stats?sid=1 ---\n{stats}");
     let live = stats.contains("<STREAMSTATUS>1</STREAMSTATUS>");
+    println!(
+        "configured={} kbps server_reported={} STREAMSTATUS_live={}",
+        cfg.bitrate_kbps,
+        server_bitrate(&stats),
+        live
+    );
     println!("STREAMSTATUS live = {live}");
     // Keep the source briefly so the listener path could catch it, then drop.
     tokio::time::sleep(Duration::from_secs(1)).await;
