@@ -148,7 +148,17 @@ impl Deck {
         };
         let packet = match format.next_packet() {
             Ok(p) => p,
-            Err(_) => {
+            Err(e) => {
+                // Natural end of stream is an IoError(UnexpectedEof); anything else is a
+                // decode problem worth logging (corrupt file, unsupported packet).
+                let eof = matches!(
+                    &e,
+                    symphonia::core::errors::Error::IoError(io_err)
+                        if io_err.kind() == std::io::ErrorKind::UnexpectedEof
+                );
+                if !eof {
+                    crate::diag::log(format!("deck decode error (track may skip): {e:?}"));
+                }
                 self.ended = true;
                 return false;
             }
