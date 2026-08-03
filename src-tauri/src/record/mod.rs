@@ -2,11 +2,11 @@
 // of streaming — recording works even when not live). A recorder thread drains it
 // and writes either MP3 (its own lame encoder) or 16-bit PCM WAV.
 //
-// ponytail: WAV buffers s16 samples in memory and writes the header on stop
-// (avoids a seeking sink). Fine for show-length archives; switch to chunked
-// seek-based writes if multi-hour lossless matters.
+// WAV writes the 44-byte header up front with placeholder sizes, streams data, then
+// seeks back to patch the RIFF/data size fields on finish. On write error, a
+// best-effort header patch still runs so the partial file is at least playable.
 
-use std::io::Write;
+use std::io::{Seek, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -65,10 +65,10 @@ pub fn wav_header(data_len: u32, sample_rate: u32, channels: u16) -> Vec<u8> {
 }
 
 /// Drain `rx` into `out` in the chosen format until `stop` is set AND the ring is
-/// empty, then finalize (flush encoder / write WAV header). Returns the first
+/// empty, then finalize (flush encoder / patch WAV header). Returns the first
 /// write/encode error. Generic over the sink so tests can pass an in-memory buffer
 /// or a failing writer (disk-full).
-pub fn run<W: Write>(
+pub fn run<W: Write + Seek>(
     rx: &mut rtrb::Consumer<[f32; 2]>,
     format: RecFormat,
     enc_cfg: &EncoderConfig,
@@ -82,7 +82,7 @@ pub fn run<W: Write>(
     }
 }
 
-fn run_mp3<W: Write>(
+fn run_mp3<W: Write + Seek>(
     rx: &mut rtrb::Consumer<[f32; 2]>,
     enc_cfg: &EncoderConfig,
     out: &mut W,
@@ -117,18 +117,30 @@ fn run_mp3<W: Write>(
     Ok(())
 }
 
-fn run_wav<W: Write>(
+fn run_wav<W: Write + Seek>(
     rx: &mut rtrb::Consumer<[f32; 2]>,
     sample_rate: u32,
     out: &mut W,
     stop: &AtomicBool,
 ) -> Result<(), String> {
-    let mut pcm: Vec<u8> = Vec::new();
+    // Placeholder header; patched with real sizes at the end.
+    out.write_all(&wav_header(0, sample_rate, 2))
+        .map_err(|e| e.to_string())?;
+    let mut written: u64 = 0;
+    let mut err: Option<String> = None;
     loop {
         let mut got = false;
         while let Ok(frame) = rx.pop() {
-            pcm.extend_from_slice(&frame_to_s16le(frame));
+            let b = frame_to_s16le(frame);
+            if let Err(e) = out.write_all(&b) {
+                err = Some(e.to_string());
+                break;
+            }
+            written += 4;
             got = true;
+        }
+        if err.is_some() {
+            break;
         }
         if stop.load(Ordering::Relaxed) && !got {
             break;
@@ -137,11 +149,23 @@ fn run_wav<W: Write>(
             std::thread::sleep(Duration::from_millis(5));
         }
     }
-    out.write_all(&wav_header(pcm.len() as u32, sample_rate, 2))
-        .map_err(|e| e.to_string())?;
-    out.write_all(&pcm).map_err(|e| e.to_string())?;
-    out.flush().map_err(|e| e.to_string())?;
-    Ok(())
+    // Best-effort header patch with the final data length (even on error).
+    match err {
+        Some(e) => {
+            // Best-effort patch so partial file is playable.
+            let _ = out.seek(std::io::SeekFrom::Start(0));
+            let _ = out.write_all(&wav_header(written as u32, sample_rate, 2));
+            let _ = out.flush();
+            Err(e)
+        }
+        None => {
+            out.seek(std::io::SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+            out.write_all(&wav_header(written as u32, sample_rate, 2))
+                .map_err(|e| e.to_string())?;
+            out.flush().map_err(|e| e.to_string())?;
+            Ok(())
+        }
+    }
 }
 
 pub struct RecorderHandle {

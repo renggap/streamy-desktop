@@ -49,7 +49,7 @@ fn wav_run_writes_header_and_all_samples() {
         tx.push([0.0, 0.0]).unwrap();
     }
     let stop = AtomicBool::new(true); // already done feeding
-    let mut out = Vec::<u8>::new();
+    let mut out = std::io::Cursor::new(Vec::<u8>::new());
     run(
         &mut rx,
         RecFormat::Wav,
@@ -59,8 +59,10 @@ fn wav_run_writes_header_and_all_samples() {
         &stop,
     )
     .unwrap();
-    assert_eq!(out.len(), 44 + n * 4);
-    assert_eq!(&out[40..44], &((n * 4) as u32).to_le_bytes());
+    let got = out.get_ref();
+    assert_eq!(got.len(), 44 + n * 4);
+    assert_eq!(&got[4..8], &(36u32 + (n * 4) as u32).to_le_bytes());
+    assert_eq!(&got[40..44], &((n * 4) as u32).to_le_bytes());
 }
 
 /// Recorder MP3 output must be byte-identical to a direct encode of the same PCM
@@ -80,7 +82,7 @@ fn mp3_run_is_byte_identical_to_direct_encode() {
         tx.push(*f).unwrap();
     }
     let stop = AtomicBool::new(true);
-    let mut rec_out = Vec::<u8>::new();
+    let mut rec_out = std::io::Cursor::new(Vec::<u8>::new());
     let cfg = EncoderConfig { sample_rate: 44100, channels: 2, bitrate_kbps: 192, codec: Codec::Mp3 };
     run(&mut rx, RecFormat::Mp3, &cfg, 44100, &mut rec_out, &stop).unwrap();
 
@@ -100,9 +102,9 @@ fn mp3_run_is_byte_identical_to_direct_encode() {
     }
     direct.extend_from_slice(&enc.flush().unwrap());
 
-    assert!(!rec_out.is_empty(), "recorder produced no bytes");
+    assert!(!rec_out.get_ref().is_empty(), "recorder produced no bytes");
     assert!(!direct.is_empty());
-    assert_eq!(rec_out, direct, "recorder MP3 must match direct encode byte-for-byte");
+    assert_eq!(rec_out.into_inner(), direct, "recorder MP3 must match direct encode byte-for-byte");
 }
 
 /// A sink that fails once it has accepted `cap` bytes — stands in for a full disk.
@@ -121,6 +123,17 @@ impl std::io::Write for FailingSink {
     }
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+impl std::io::Seek for FailingSink {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        self.written = match pos {
+            std::io::SeekFrom::Start(p) => p as usize,
+            std::io::SeekFrom::Current(d) => (self.written as i64 + d).max(0) as usize,
+            std::io::SeekFrom::End(d) => (self.cap as i64 + d).max(0) as usize,
+        };
+        Ok(self.written as u64)
     }
 }
 
