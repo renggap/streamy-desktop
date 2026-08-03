@@ -42,6 +42,7 @@ pub fn run() {
             commands::set_output_device,
             commands::set_recording_dir,
             commands::set_volume,
+            commands::set_monitor_file_volume,
             commands::get_settings,
             commands::list_profiles,
             commands::save_profile,

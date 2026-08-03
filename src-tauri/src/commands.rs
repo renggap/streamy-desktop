@@ -258,6 +258,18 @@ pub fn set_volume(
     engine.set_volume(gain)
 }
 
+/// Monitor file (deck) volume as a percent (0..=200). Persisted + applied live.
+#[tauri::command]
+pub fn set_monitor_file_volume(
+    volume_pct: f32,
+    engine: State<'_, AudioEngine>,
+    settings: State<'_, SettingsStore>,
+) -> Result<(), String> {
+    let gain = (volume_pct / 100.0).clamp(0.0, 2.0);
+    settings.set_monitor_file_volume(gain)?;
+    engine.set_monitor_file_gain(gain)
+}
+
 #[tauri::command]
 pub fn get_settings(settings: State<'_, SettingsStore>) -> Settings {
     settings.get()
