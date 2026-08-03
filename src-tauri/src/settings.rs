@@ -18,6 +18,10 @@ pub struct Settings {
     /// Master output gain (1.0 = unity / 100%). 0.0..=2.0.
     #[serde(default = "default_volume")]
     pub volume: f32,
+    /// Monitor-only gain for local file playback (1.0 = unity). Broadcast
+    /// unaffected. Persisted so the DJ's listening level survives restarts.
+    #[serde(default = "default_volume")]
+    pub monitor_file_volume: f32,
 }
 
 fn default_volume() -> f32 {
@@ -31,6 +35,7 @@ impl Default for Settings {
             output_device: None,
             recording_dir: None,
             volume: default_volume(),
+            monitor_file_volume: default_volume(),
         }
     }
 }
@@ -91,6 +96,13 @@ impl SettingsStore {
         self.persist(&g)
     }
 
+    /// Monitor-only gain for local file playback, 0.0..=2.0 (1.0 = unity).
+    pub fn set_monitor_file_volume(&self, gain: f32) -> Result<(), String> {
+        let mut g = self.inner.lock().map_err(|e| e.to_string())?;
+        g.monitor_file_volume = gain;
+        self.persist(&g)
+    }
+
     fn persist(&self, s: &Settings) -> Result<(), String> {
         if let Some(dir) = self.path.parent() {
             fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -100,5 +112,19 @@ impl SettingsStore {
             serde_json::to_string_pretty(s).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_settings_json_without_monitor_file_volume_loads_at_unity() {
+        // Simulates a pre-feature settings.json (no monitor_file_volume key).
+        let json = r#"{"volume":0.8}"#;
+        let s: Settings = serde_json::from_str(json).expect("parse");
+        assert_eq!(s.monitor_file_volume, 1.0, "missing key must default to unity");
+        assert_eq!(s.volume, 0.8);
     }
 }
