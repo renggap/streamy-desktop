@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { nowPlaying, playing, position } from '../stores';
-  import { prev, next, play, pause, seek } from '../api';
+  import { nowPlaying, playing, position, monitorFileVolume, errorMsg } from '../stores';
+  import { prev, next, play, pause, seek, setMonitorFileVolume } from '../api';
 
   let scrubbing = $state(false);
   let scrubPct = $state(0);
@@ -42,6 +42,16 @@
       play();
       playing.set(true);
     }
+  }
+
+  let volTimer: ReturnType<typeof setTimeout> | undefined;
+  function onFileVolume(e: Event) {
+    const pct = parseInt((e.currentTarget as HTMLInputElement).value, 10);
+    monitorFileVolume.set(pct);
+    clearTimeout(volTimer);
+    volTimer = setTimeout(() => {
+      setMonitorFileVolume(pct).catch((e) => errorMsg.set(String(e)));
+    }, 120);
   }
 </script>
 
@@ -100,4 +110,27 @@
     </div>
     <span class="w-8">{fmt($position.total_secs)}</span>
   </div>
+
+  <div class="mt-2 flex items-center gap-2">
+    <span class="text-[10px] uppercase tracking-wider text-zinc-500">File vol</span>
+    <input
+      type="range"
+      min="0"
+      max="200"
+      step="1"
+      value={$monitorFileVolume}
+      oninput={onFileVolume}
+      class="streamy-range flex-1"
+      aria-label="Local file volume"
+    />
+    <span class="w-10 text-right text-[10px] tabular-nums text-zinc-500">{$monitorFileVolume}%</span>
+  </div>
 </header>
+
+<style>
+  .streamy-range {
+    accent-color: #10b981;
+    height: 1.25rem;
+    cursor: pointer;
+  }
+</style>

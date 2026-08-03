@@ -49,6 +49,8 @@ export const setRecordingDir = (dir: string | null) =>
   invoke<void>('set_recording_dir', { dir });
 export const setVolume = (volumePct: number) =>
   invoke<void>('set_volume', { volumePct });
+export const setMonitorFileVolume = (volumePct: number) =>
+  invoke<void>('set_monitor_file_volume', { volumePct });
 export const repairWebview2 = () => invoke<string>('repair_webview2');
 export const webview2Installed = () => invoke<boolean>('webview2_installed');
 export const getSettings = () =>
@@ -57,6 +59,7 @@ export const getSettings = () =>
     output_device: string | null;
     recording_dir: string | null;
     volume: number;
+    monitor_file_volume: number;
   }>('get_settings');
 export const setSourceMode = (mode: SourceMode) =>
   invoke<void>('set_source_mode', { mode });

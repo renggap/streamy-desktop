@@ -20,6 +20,7 @@
     selectedOutput,
     recDir,
     volume,
+    monitorFileVolume,
     streamTitle,
     recording,
     recordingPath,
@@ -71,6 +72,8 @@
       if (s.output_device) selectedOutput.set(s.output_device);
       if (s.recording_dir) recDir.set(s.recording_dir);
       if (typeof s.volume === 'number') volume.set(Math.round(s.volume * 100));
+      if (typeof s.monitor_file_volume === 'number')
+        monitorFileVolume.set(Math.round(s.monitor_file_volume * 100));
     });
 
     const np = listen<Track>('now_playing', (e) => {
