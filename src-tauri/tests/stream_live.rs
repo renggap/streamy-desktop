@@ -139,7 +139,7 @@ async fn broadcast_ring_drives_server_live() {
         }
     });
 
-    let handle = broadcast::start(rx, uvox, enc_cfg, None)
+    let handle = broadcast::start(rx, broadcast::StreamConfig::Ultravox(uvox), enc_cfg, None)
         .await
         .expect("broadcast start");
     tokio::time::sleep(Duration::from_secs(3)).await;

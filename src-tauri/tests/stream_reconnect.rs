@@ -114,7 +114,7 @@ async fn reconnects_with_backoff_after_drops() {
     // to keep the test well under a second.
     let handle = broadcast::start_with_opts(
         rx,
-        cfg(port),
+        broadcast::StreamConfig::Ultravox(cfg(port)),
         enc,
         None,
         Duration::from_millis(150),

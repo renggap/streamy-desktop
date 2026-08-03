@@ -15,6 +15,7 @@ fn cfg(host: String, port: u16) -> IcySourceConfig {
         icy_url: "http://streamy.example".into(),
         icy_pub: true,
         icy_br: 128,
+        sample_rate: 44100,
     }
 }
 
@@ -47,11 +48,11 @@ async fn handshake_sends_icy_headers_and_streams_payload_intact() {
     assert!(req.starts_with("SOURCE /test HTTP/1.1"), "bad request line: {req}");
     assert!(req.contains("Content-Type: audio/mpeg"));
     assert!(req.contains("Authorization: Basic dXNlcjpwYXNz")); // base64("user:pass")
-    assert!(req.contains("icy-name: Streamy"));
-    assert!(req.contains("icy-genre: Misc"));
-    assert!(req.contains("icy-url: http://streamy.example"));
-    assert!(req.contains("icy-pub: 1"));
-    assert!(req.contains("icy-br: 128"));
+    assert!(req.contains("ice-name: Streamy"));
+    assert!(req.contains("ice-genre: Misc"));
+    assert!(req.contains("ice-url: http://streamy.example"));
+    assert!(req.contains("ice-public: 1"));
+    assert!(req.contains("ice-bitrate: 128"));
     assert_eq!(got, audio, "payload must be byte-identical");
 }
 
@@ -70,5 +71,5 @@ async fn handshake_reports_rejection() {
         .await
         .err()
         .expect("expected rejection");
-    assert!(err.contains("rejected"), "unexpected: {err}");
+    assert!(err.contains("authentication failed"), "unexpected: {err}");
 }
