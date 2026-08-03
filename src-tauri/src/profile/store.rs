@@ -59,7 +59,10 @@ impl ProfileStore {
         fs::read_to_string(self.path())
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
+            .unwrap_or_else(|| {
+                crate::diag::log("WARN: profiles.json corrupt or unreadable; profile list empty");
+                Vec::new()
+            })
     }
 
     fn write_all(&self, profiles: &[ConnectionProfile]) -> Result<(), String> {

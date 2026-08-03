@@ -46,7 +46,10 @@ impl SettingsStore {
         let inner = fs::read_to_string(&path)
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default();
+            .unwrap_or_else(|| {
+                crate::diag::log("WARN: settings.json corrupt or unreadable; using defaults");
+                Settings::default()
+            });
         Self {
             path,
             inner: Mutex::new(inner),
@@ -54,7 +57,13 @@ impl SettingsStore {
     }
 
     pub fn get(&self) -> Settings {
-        self.inner.lock().map(|g| g.clone()).unwrap_or_default()
+        match self.inner.lock() {
+            Ok(g) => g.clone(),
+            Err(_) => {
+                crate::diag::log("WARN: settings mutex poisoned; returning defaults");
+                Settings::default()
+            }
+        }
     }
 
     pub fn set_input_device(&self, name: String) -> Result<(), String> {
