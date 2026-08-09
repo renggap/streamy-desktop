@@ -23,6 +23,7 @@ fn sample(name: &str) -> ConnectionProfile {
         genre: "Misc".into(),
         url: "http://x".into(),
         public: true,
+        azuracast: false,
         plaintext_pw: None,
     }
 }
@@ -86,6 +87,38 @@ fn profile_roundtrips_without_protocol_field() {
     let list = s.list();
     assert_eq!(list.len(), 1);
     assert_eq!(list[0].name, "np");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Old profiles.json written before the `azuracast` field existed must still
+/// load, defaulting to false (Shoutcast/Ultravox). Regression guard for the
+/// serde(default) on the new field.
+#[test]
+fn legacy_profile_without_azuracast_loads_false() {
+    let (s, dir) = tmp_store("legacy");
+    std::fs::create_dir_all(&dir).unwrap();
+    // No `azuracast` key — exactly what an older Streamy wrote to disk.
+    std::fs::write(
+        dir.join("profiles.json"),
+        r#"[{"name":"old","host":"h","port":8000,"user":"source","mount":"/stream","stream_id":1,"station_name":"Streamy","genre":"Misc","url":"http://x","public":true}]"#,
+    )
+    .unwrap();
+    let list = s.list();
+    assert_eq!(list.len(), 1);
+    assert!(!list[0].azuracast, "missing field must default to false");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A profile saved with azuracast=true must round-trip the flag through disk.
+#[test]
+fn azuracast_flag_roundtrips_true() {
+    let (s, dir) = tmp_store("az");
+    let mut p = sample("az");
+    p.azuracast = true;
+    s.save(p, Some("pw".to_string())).unwrap();
+    let list = s.list();
+    assert_eq!(list.len(), 1);
+    assert!(list[0].azuracast, "AzuraCast flag must persist");
     std::fs::remove_dir_all(&dir).ok();
 }
 

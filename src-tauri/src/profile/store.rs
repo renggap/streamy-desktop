@@ -16,6 +16,13 @@ pub struct ConnectionProfile {
     pub genre: String,
     pub url: String,
     pub public: bool,
+    /// AzuraCast (and other Icecast-DJ) servers accept the DJ/source connection
+    /// over the Icecast source protocol, not Ultravox — even when they relay to
+    /// a Shoutcast DNAS on the listener side. When true, connect skips the
+    /// Ultravox probe and goes straight to Icecast, which is what fixes DJ
+    /// login on AzuraCast. Default false: Shoutcast DNAS using Ultravox.
+    #[serde(default)]
+    pub azuracast: bool,
     /// Present only when the OS keyring is unavailable (plaintext fallback).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plaintext_pw: Option<String>,

@@ -19,6 +19,7 @@
       genre: '',
       url: '',
       public: true,
+      azuracast: false,
     };
   }
 
@@ -111,6 +112,14 @@
       > is the Icecast source/DJ login, or the optional Ultravox DJ id (leave blank for Ultravox
       source login).
     </div>
+    <label class="col-span-2 flex items-center gap-2 text-xs text-zinc-300">
+      <input type="checkbox" class="h-3.5 w-3.5 accent-emerald-600" bind:checked={editing.azuracast} />
+      AzuraCast server
+      <span class="text-[10px] text-zinc-500"
+        >— DJ/source connects via Icecast even if it relays to Shoutcast DNAS for listeners. Skips the
+        Ultravox probe so DJ login is immediate.</span
+      >
+    </label>
     <label class="col-span-2 flex flex-col gap-1"
       >Password
       <input

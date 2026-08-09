@@ -329,35 +329,44 @@ pub async fn connect_stream(
     // harbor. The user no longer picks a protocol — connect_stream hands both
     // configs to the streamer, which latches to whichever handshake succeeds.
     let sample_rate = engine.output_rate();
-    let stream_cfg = StreamConfig::Auto {
-        ultravox: UltravoxConfig {
-            host: profile.host.clone(),
-            port: profile.port,
-            stream_id: profile.stream_id,
-            password: password.clone(),
-            user: profile.user.clone(),
-            content_type: content_type.into(),
-            bitrate_kbps,
-            name: profile.station_name.clone(),
-            genre: profile.genre.clone(),
-            url: profile.url.clone(),
-        },
-        // Icecast / Liquidsoap harbor: HTTP SOURCE + Basic auth (user + source
-        // password); metadata over the /admin/metadata admin endpoint.
-        icecast: IcySourceConfig {
-            host: profile.host.clone(),
-            port: profile.port,
-            mount: profile.mount.clone(),
-            user: profile.user.clone(),
-            password,
-            content_type: content_type.into(),
-            icy_name: profile.station_name.clone(),
-            icy_genre: profile.genre.clone(),
-            icy_url: profile.url.clone(),
-            icy_pub: profile.public,
-            icy_br: bitrate_kbps,
-            sample_rate,
-        },
+    // Icecast / Liquidsoap harbor: HTTP SOURCE + Basic auth (user + source
+    // password); metadata over the /admin/metadata admin endpoint. Built for
+    // both paths — AzuraCast uses it directly, Auto keeps it as the fallback.
+    let icecast = IcySourceConfig {
+        host: profile.host.clone(),
+        port: profile.port,
+        mount: profile.mount.clone(),
+        user: profile.user.clone(),
+        password: password.clone(),
+        content_type: content_type.into(),
+        icy_name: profile.station_name.clone(),
+        icy_genre: profile.genre.clone(),
+        icy_url: profile.url.clone(),
+        icy_pub: profile.public,
+        icy_br: bitrate_kbps,
+        sample_rate,
+    };
+    // AzuraCast accepts the DJ/source feed over Icecast even when relaying to a
+    // Shoutcast DNAS for listeners — so skip the Ultravox probe and connect
+    // Icecast directly. Default (Shoutcast DNAS): Auto, Ultravox-first.
+    let stream_cfg = if profile.azuracast {
+        StreamConfig::Icecast(icecast)
+    } else {
+        StreamConfig::Auto {
+            ultravox: UltravoxConfig {
+                host: profile.host.clone(),
+                port: profile.port,
+                stream_id: profile.stream_id,
+                password,
+                user: profile.user.clone(),
+                content_type: content_type.into(),
+                bitrate_kbps,
+                name: profile.station_name.clone(),
+                genre: profile.genre.clone(),
+                url: profile.url.clone(),
+            },
+            icecast,
+        }
     };
     let enc_cfg = EncoderConfig {
         sample_rate,
