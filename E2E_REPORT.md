@@ -70,3 +70,12 @@ Cold restart, all four user requirements replayed end-to-end on the live app:
 
 All evidence: x11grab pixel measurements + xwininfo geometry from the running binary,
 not inspection of code alone.
+
+### Deep-dive validation (2026-08-30, follow-up 3)
+
+- Bitrate live change while connected: popup select 24 -> 32 kbps, liveReconnect fired,
+  status `AAC · 32 KBPS` with DISCONNECT still engaged; restored to 24 kbps. PASS.
+- Full release build: `cargo build --release` exit 0 (3m56s, 20.7 MB binary). Release
+  binary smoke-tested on Xvfb: launches, 30% width, playlist loads, UI renders. PASS.
+- Unknown-field round-trip: new unit test `unknown_fields_dropped_on_save` proves extras
+  are tolerated on load and stripped to canonical schema on save. 53 lib tests green. PASS.

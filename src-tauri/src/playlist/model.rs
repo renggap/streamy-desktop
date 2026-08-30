@@ -118,4 +118,27 @@ mod tests {
         assert!(p.tracks.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn unknown_fields_dropped_on_save() {
+        // Old/newer writer added extra keys: load tolerates them, save writes
+        // canonical schema (serde drops unknown fields on deserialize).
+        let dir = std::env::temp_dir().join(format!("streamy-pl-extra-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("playlist.json"),
+            r#"[{"path":"/a.mp3","title":"a","artist":"x","duration_secs":1.0,"future":"f"}]"#,
+        )
+        .unwrap();
+        let p = Playlist::load_from(&dir);
+        assert_eq!(p.tracks.len(), 1, "extras must not block load");
+        p.save_to(&dir).expect("save");
+        let saved: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(dir.join("playlist.json")).unwrap())
+                .expect("saved file is valid JSON");
+        let obj = saved.as_array().unwrap()[0].as_object().unwrap();
+        assert!(!obj.contains_key("future"), "unknown field must be stripped");
+        assert!(obj.contains_key("path") && obj.contains_key("title"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
