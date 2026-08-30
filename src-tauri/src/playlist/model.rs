@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fs;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Track {
@@ -36,6 +37,35 @@ impl Playlist {
             _ => None,
         }
     }
+
+    /// Persist tracks to <data_dir>/playlist.json so the playlist survives
+    /// restarts. Best-effort: failures log and return Err for caller to log.
+    pub fn save_to(&self, dir: &std::path::Path) -> Result<(), String> {
+        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        fs::write(
+            dir.join("playlist.json"),
+            serde_json::to_string_pretty(&self.tracks).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())
+    }
+
+    /// Load tracks from <data_dir>/playlist.json. Missing/corrupt file = empty
+    /// playlist (same recovery path as settings.json).
+    pub fn load_from(dir: &std::path::Path) -> Self {
+        let tracks = fs::read_to_string(dir.join("playlist.json"))
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_else(|| {
+                if dir.join("playlist.json").exists() {
+                    crate::diag::log("WARN: playlist.json corrupt; starting empty");
+                }
+                vec![]
+            });
+        Self {
+            tracks,
+            current: None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -56,5 +86,25 @@ mod tests {
         p.add(tr(0));
         p.add(tr(1));
         assert_eq!(p.next_index(Some(1)), None);
+    }
+
+    #[test]
+    fn playlist_roundtrips_through_json() {
+        let dir = std::env::temp_dir().join(format!("streamy-pl-test-{}", std::process::id()));
+        let mut p = Playlist::new();
+        p.add(tr(0));
+        p.add(tr(1));
+        p.save_to(&dir).expect("save");
+        let p2 = Playlist::load_from(&dir);
+        assert_eq!(p2.tracks.len(), 2);
+        assert_eq!(p2.tracks[1].path, "/t1.wav");
+        assert_eq!(p2.current, None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn missing_playlist_file_loads_empty() {
+        let p = Playlist::load_from(std::path::Path::new("/nonexistent-streamy-dir"));
+        assert!(p.tracks.is_empty());
     }
 }

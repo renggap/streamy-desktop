@@ -59,7 +59,6 @@ pub fn run() {
         .manage(std::sync::Mutex::new(
             commands::BcastState::Idle,
         ))
-        .manage(std::sync::Mutex::new(playlist::model::Playlist::new()))
         .manage(std::sync::Mutex::new(
             None::<commands::RecSlot>,
         ))
@@ -68,6 +67,10 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             let _ = std::fs::create_dir_all(&data_dir);
             diag::init(data_dir.join("streamy.log"));
+            // Playlist lives in the OS app-data dir so tracks survive restarts.
+            app.manage(std::sync::Mutex::new(
+                playlist::model::Playlist::load_from(&data_dir),
+            ));
             #[cfg(debug_assertions)]
             {
                 use tauri::Manager;
@@ -111,6 +114,22 @@ pub fn run() {
             // Restore the master volume (defaults to unity / 100%).
             let vol = app.state::<settings::SettingsStore>().get().volume;
             let _ = app.state::<engine::engine::AudioEngine>().set_volume(vol);
+            // Default launch width = 30% of the primary monitor (user request).
+            // Logical units so HiDPI stays proportionally correct.
+            {
+                use tauri::Manager;
+                if let Some(w) = app.get_webview_window("main") {
+                    if let Ok(Some(monitor)) = w.current_monitor() {
+                        let size = monitor.size();
+                        let scale = w.scale_factor().unwrap_or(1.0);
+                        let logical_w = size.width as f64 / scale * 0.30;
+                        if let Ok(cur) = w.inner_size() {
+                            let logical_h = cur.to_logical::<f64>(scale).height;
+                            let _ = w.set_size(tauri::LogicalSize::new(logical_w, logical_h));
+                        }
+                    }
+                }
+            }
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()

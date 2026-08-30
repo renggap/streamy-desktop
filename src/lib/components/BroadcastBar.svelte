@@ -100,11 +100,15 @@
     <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
       <span class="relative flex h-3 w-3">
         {#if connected}
-          <span class="onair-ping absolute inline-flex h-full w-full rounded-full bg-red-500"></span>
+          <span class="onair-ping absolute inline-flex h-full w-full rounded-full bg-lime-400"></span>
         {/if}
-        <span class="relative inline-flex h-3 w-3 rounded-full {connected ? 'bg-red-500' : 'bg-gray-600'}"></span>
+        <span
+          class="relative inline-flex h-3 w-3 rounded-full {connected
+            ? 'onair-beat bg-lime-400'
+            : 'bg-gray-600'}"
+        ></span>
       </span>
-      <span class={connected ? 'text-red-400' : 'text-gray-500'}>{connected ? 'ON AIR' : 'OFF AIR'}</span>
+      <span class={connected ? 'text-lime-400' : 'text-gray-500'}>{connected ? 'ON AIR' : 'OFF AIR'}</span>
     </div>
   </div>
 
@@ -206,8 +210,20 @@
   .onair-ping {
     animation: onair-ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite;
   }
+  .onair-beat {
+    animation: onair-beat 1.2s ease-in-out infinite;
+  }
+  @keyframes onair-beat {
+    0%, 100% { transform: scale(1); }
+    25% { transform: scale(1.45); }
+    40% { transform: scale(1); }
+    55% { transform: scale(1.3); }
+  }
   @keyframes onair-ping {
     0% { transform: scale(1); opacity: 0.8; }
     75%, 100% { transform: scale(2.2); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .onair-ping, .onair-beat { animation: none; }
   }
 </style>

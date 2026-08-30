@@ -60,6 +60,7 @@ fn play_at(engine: &AudioEngine, app: &AppHandle, track: &Track) -> Result<(), S
 pub fn add_to_playlist(
     paths: Vec<String>,
     playlist: State<'_, Mutex<Playlist>>,
+    app: AppHandle,
 ) -> Result<Vec<Track>, String> {
     // Parse tags in parallel — tag reads are I/O bound (and on Windows, each
     // open is contended by Defender), so a parallel map is a large win.
@@ -78,6 +79,12 @@ pub fn add_to_playlist(
     let mut p = playlist.lock().map_err(|e| e.to_string())?;
     for t in parsed {
         p.add(t);
+    }
+    // Persist so the playlist survives restarts. Failure is non-fatal (log only).
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        if let Err(e) = p.save_to(&data_dir) {
+            crate::diag::log(&format!("WARN: playlist save failed: {e}"));
+        }
     }
     Ok(p.tracks.clone())
 }

@@ -38,8 +38,8 @@ export const duckThreshold = writable(0.15);
 export const duckDepth = writable(12);
 
 export const profiles = writable<ConnectionProfile[]>([]);
-export const bitrate = writable(128);
-export const codec = writable<'mp3' | 'aac'>('mp3');
+export const bitrate = writable(24); // AAC talk-radio sweet spot (user default)
+export const codec = writable<'mp3' | 'aac'>('aac');
 export const streamStatus = writable<StreamStatus>({ state: 'disconnected' });
 
 export interface StreamStatus {

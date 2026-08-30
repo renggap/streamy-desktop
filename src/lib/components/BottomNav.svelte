@@ -1,6 +1,13 @@
 <script lang="ts">
+  import { getVersion } from '@tauri-apps/api/app';
+  import { onMount } from 'svelte';
   import { view } from '../stores';
   import type { View } from '../stores';
+
+  let version = '';
+  onMount(() => {
+    getVersion().then((v) => (version = v)).catch(() => {});
+  });
 
   const tabs: { id: View; label: string; icon: string }[] = [
     { id: 'home', label: 'Home', icon: '☰' },
@@ -22,6 +29,9 @@
         Streamy
       </span>
       <span class="block text-[8px] font-semibold tracking-[0.34em] text-gray-500">DESKTOP</span>
+      {#if version}
+        <span class="block text-[8px] tabular-nums text-gray-600">v{version}</span>
+      {/if}
     </span>
   </div>
 

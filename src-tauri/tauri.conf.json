@@ -35,7 +35,7 @@
     ],
     "windows": {
       "webviewInstallMode": {
-        "type": "skipInstall"
+        "type": "skip"
       }
     },
     "android": {

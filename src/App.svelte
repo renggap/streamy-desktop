@@ -157,13 +157,15 @@
     {:else if $view === 'stream'}
       <div class="space-y-4 p-4">
         <BroadcastBar />
-        <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Record</h3>
-          <RecordBar />
-        </div>
-        <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Source</h3>
-          <SourceToggle />
+        <div class="grid grid-cols-2 gap-4">
+          <div class="retro-chrome rounded-lg p-4">
+            <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Record</h3>
+            <RecordBar />
+          </div>
+          <div class="retro-chrome rounded-lg p-4">
+            <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Source</h3>
+            <SourceToggle />
+          </div>
         </div>
         <div class="retro-chrome rounded-lg p-4">
           <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Levels</h3>
