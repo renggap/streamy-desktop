@@ -40,9 +40,9 @@
 
 <div class="space-y-3 text-xs">
   <label class="block">
-    <span class="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">Microphone</span>
+    <span class="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Microphone</span>
     <select
-      class="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-zinc-200"
+      class="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-200"
       value={$selectedInput}
       onchange={onInput}
     >
@@ -50,9 +50,9 @@
     </select>
   </label>
   <label class="block">
-    <span class="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">Output</span>
+    <span class="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Output</span>
     <select
-      class="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-zinc-200"
+      class="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-200"
       value={$selectedOutput}
       onchange={onOutput}
     >
@@ -61,9 +61,9 @@
     </select>
   </label>
   <label class="block">
-    <span class="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider text-zinc-500">
+    <span class="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider text-gray-500">
       <span>Volume</span>
-      <span class="tabular-nums text-zinc-300">{$volume}%</span>
+      <span class="tabular-nums text-gray-300">{$volume}%</span>
     </span>
     <input
       type="range"

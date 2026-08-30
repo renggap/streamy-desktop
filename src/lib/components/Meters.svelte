@@ -5,16 +5,16 @@
   const w = (v: number) => `${Math.min(100, Math.max(0, v * 100)).toFixed(1)}%`;
 </script>
 
-<div class="flex flex-col gap-1 text-[10px] text-zinc-400">
+<div class="flex flex-col gap-1 text-[10px] text-gray-400">
   {#snippet row(label: string, ch: [number, number])}
     <div class="flex items-center gap-1">
-      <span class="w-6 shrink-0 text-zinc-500">{label}</span>
+      <span class="w-6 shrink-0 text-gray-500">{label}</span>
       <div class="flex flex-1 flex-col gap-0.5">
-        <div class="h-1.5 w-full overflow-hidden rounded bg-zinc-800">
-          <div class="h-full bg-emerald-500" style="width: {w(ch[0])}"></div>
+        <div class="h-1.5 w-full overflow-hidden rounded bg-gray-800">
+          <div class="h-full bg-lime-500" style="width: {w(ch[0])}"></div>
         </div>
-        <div class="h-1.5 w-full overflow-hidden rounded bg-zinc-800">
-          <div class="h-full bg-emerald-500" style="width: {w(ch[1])}"></div>
+        <div class="h-1.5 w-full overflow-hidden rounded bg-gray-800">
+          <div class="h-full bg-lime-500" style="width: {w(ch[1])}"></div>
         </div>
       </div>
     </div>

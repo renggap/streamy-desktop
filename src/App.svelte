@@ -138,11 +138,11 @@
   });
 </script>
 
-<main class="flex h-screen flex-col bg-zinc-950 text-zinc-200">
+<main class="flex h-screen flex-col bg-gray-900 text-gray-200">
   <WelcomeModal />
   {#if $errorMsg}
     <div
-      class="flex items-start gap-2 border-b border-red-900 bg-red-950/60 px-4 py-2 text-sm text-red-200"
+      class="flex items-start gap-2 border-b border-red-900 bg-red-950/40 px-4 py-2 text-sm text-red-200"
     >
       <span class="flex-1">{$errorMsg}</span>
       <button class="text-red-300 hover:text-red-100" onclick={() => errorMsg.set(null)}>✕</button>
@@ -158,43 +158,43 @@
       <div class="space-y-4 p-4">
         <BroadcastBar />
         <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Record</h3>
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Record</h3>
           <RecordBar />
         </div>
         <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Source</h3>
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Source</h3>
           <SourceToggle />
         </div>
         <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Levels</h3>
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Levels</h3>
           <Meters />
         </div>
         <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Mixer</h3>
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Mixer</h3>
           <Mixer />
         </div>
       </div>
     {:else}
       <div class="space-y-4 p-4">
         <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Devices</h3>
+          <h3 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Devices</h3>
           <DeviceChoosers />
         </div>
         <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
+          <h3 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
             Recording folder
           </h3>
           <RecordingSettings />
         </div>
         <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
+          <h3 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
             Connection profiles
           </h3>
           <ProfileManager />
         </div>
         <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Runtime</h3>
-          <p class="mb-3 text-[11px] text-zinc-500">
+          <h3 class="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Runtime</h3>
+          <p class="mb-3 text-[11px] text-gray-500">
             WebView2 is auto-installed with Streamy on supported Windows. Run repair if the app ever
             fails to start with a WebView2 message.
           </p>

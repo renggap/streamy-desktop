@@ -16,17 +16,17 @@
 <div class="space-y-3">
   <!-- 3-band EQ: vertical-range sliders, -12..+12 dB -->
   <div>
-    <div class="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-500">EQ</div>
+    <div class="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">EQ</div>
     <div class="flex items-end justify-center gap-6">
-      <label class="flex flex-col items-center gap-1 text-[10px] text-zinc-400">
+      <label class="flex flex-col items-center gap-1 text-[10px] text-gray-400">
         <input type="range" min="-12" max="12" step="1" class="eq-range" bind:value={$eqLow} onchange={onEq} />
         Low
       </label>
-      <label class="flex flex-col items-center gap-1 text-[10px] text-zinc-400">
+      <label class="flex flex-col items-center gap-1 text-[10px] text-gray-400">
         <input type="range" min="-12" max="12" step="1" class="eq-range" bind:value={$eqMid} onchange={onEq} />
         Mid
       </label>
-      <label class="flex flex-col items-center gap-1 text-[10px] text-zinc-400">
+      <label class="flex flex-col items-center gap-1 text-[10px] text-gray-400">
         <input type="range" min="-12" max="12" step="1" class="eq-range" bind:value={$eqHigh} onchange={onEq} />
         High
       </label>
@@ -35,20 +35,20 @@
 
   <!-- Crossfader A <-> B -->
   <div>
-    <div class="mb-1 flex items-center justify-between text-[10px] text-zinc-500">
-      <span>DECK A</span><span class="font-semibold uppercase tracking-wider text-zinc-500">Crossfade</span><span>DECK B</span>
+    <div class="mb-1 flex items-center justify-between text-[10px] text-gray-500">
+      <span>DECK A</span><span class="font-semibold uppercase tracking-wider text-gray-500">Crossfade</span><span>DECK B</span>
     </div>
     <input type="range" min="0" max="1" step="0.01" class="xfade-range" bind:value={$crossfade} onchange={onCrossfade} />
   </div>
 
   <!-- Mic auto-duck -->
-  <div class="border-t border-zinc-800 pt-2">
-    <label class="flex items-center justify-between text-xs text-zinc-300">
+  <div class="border-t border-gray-700 pt-2">
+    <label class="flex items-center justify-between text-xs text-gray-300">
       <span>Mic auto-duck</span>
       <input type="checkbox" bind:checked={$duckEnabled} onchange={onDuck} />
     </label>
     {#if $duckEnabled}
-      <div class="mt-2 grid grid-cols-2 gap-2 text-[10px] text-zinc-400">
+      <div class="mt-2 grid grid-cols-2 gap-2 text-[10px] text-gray-400">
         <label class="flex flex-col gap-1">
           Threshold {$duckThreshold.toFixed(2)}
           <input type="range" min="0.02" max="0.5" step="0.01" bind:value={$duckThreshold} onchange={onDuck} />

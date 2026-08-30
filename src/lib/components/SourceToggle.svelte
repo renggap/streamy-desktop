@@ -12,12 +12,12 @@
 </script>
 
 <div class="flex items-center gap-1 text-xs">
-  <span class="mr-1 text-zinc-500">Source</span>
+  <span class="mr-1 text-gray-500">Source</span>
   {#each modes as m (m)}
     <button
       class="rounded px-2 py-1 capitalize {$sourceMode === m
-        ? 'bg-zinc-200 text-zinc-900'
-        : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}"
+        ? 'bg-gray-100 text-gray-900'
+        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}"
       onclick={() => pick(m)}>{m}</button
     >
   {/each}

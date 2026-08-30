@@ -45,9 +45,9 @@
 
 <div class="space-y-2">
   <div class="flex items-center gap-2 text-xs">
-    <span class="text-zinc-500">Record</span>
+    <span class="text-gray-500">Record</span>
     <select
-      class="rounded bg-zinc-800 px-2 py-1 text-zinc-200"
+      class="rounded bg-gray-800 px-2 py-1 text-gray-200"
       bind:value={$recFormat}
       disabled={$recording}
     >
@@ -56,7 +56,7 @@
     </select>
     <button
       class="rounded px-3 py-1 font-medium {$recording
-        ? 'bg-zinc-700 text-white hover:bg-zinc-600'
+        ? 'bg-gray-700 text-white hover:bg-gray-600'
         : 'bg-red-700 text-white hover:bg-red-600'}"
       onclick={toggle}
     >
@@ -67,6 +67,6 @@
     {/if}
   </div>
   {#if $recording && $recordingPath}
-    <div class="truncate text-[11px] text-zinc-600">→ {$recordingPath}</div>
+    <div class="truncate text-[11px] text-gray-500">→ {$recordingPath}</div>
   {/if}
 </div>

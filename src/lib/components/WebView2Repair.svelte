@@ -23,7 +23,7 @@
 
 <div class="space-y-2">
   <button
-    class="rounded-lg bg-gradient-to-b from-cyan-600 to-cyan-800 px-3 py-2 text-xs font-semibold text-white hover:from-cyan-500 hover:to-cyan-700 active:scale-95 disabled:opacity-50"
+    class="rounded-lg bg-gradient-to-b from-lime-600 to-lime-800 px-3 py-2 text-xs font-semibold text-white hover:from-lime-500 hover:to-lime-700 active:scale-95 disabled:opacity-50"
     onclick={repair}
     disabled={$wv2State === 'downloading' || $wv2State === 'launching'}
   >
@@ -36,13 +36,13 @@
 
   {#if $wv2State === 'downloading'}
     <div>
-      <div class="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+      <div class="h-2 w-full overflow-hidden rounded-full bg-gray-800">
         <div
-          class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500 transition-[width]"
+          class="h-full rounded-full bg-gradient-to-r from-lime-400 to-lime-600 transition-[width]"
           style="width: {$wv2Progress.total ? pct : 40}%"
         ></div>
       </div>
-      <div class="mt-1 text-[10px] text-zinc-500">
+      <div class="mt-1 text-[10px] text-gray-500">
         {#if $wv2Progress.total}
           {mb($wv2Progress.downloaded)} / {mb($wv2Progress.total)} MB
         {:else}
@@ -53,7 +53,7 @@
   {/if}
 
   {#if $wv2State === 'done'}
-    <div class="text-[11px] text-emerald-400">
+    <div class="text-[11px] text-lime-400">
       ✓ Installer launched — follow the Microsoft prompts, then relaunch Streamy.
     </div>
   {:else if $wv2State === 'err'}

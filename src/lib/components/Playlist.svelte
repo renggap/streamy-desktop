@@ -26,11 +26,11 @@
   <!-- Header -->
   <div class="retro-chrome flex items-center justify-between rounded-lg px-4 py-3">
     <div>
-      <div class="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Playlist</div>
-      <div class="text-[10px] text-zinc-600">{$playlist.length} {$playlist.length === 1 ? 'track' : 'tracks'}</div>
+      <div class="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Playlist</div>
+      <div class="text-[10px] text-gray-500">{$playlist.length} {$playlist.length === 1 ? 'track' : 'tracks'}</div>
     </div>
     <button
-      class="rounded-lg bg-gradient-to-b from-emerald-500 to-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:from-emerald-400 hover:to-emerald-600 active:scale-95"
+      class="rounded-lg bg-gradient-to-b from-lime-600 to-lime-700 px-3 py-1.5 text-xs font-semibold text-white hover:from-lime-300 hover:to-lime-600 active:scale-95"
       onclick={addFiles}
     >
       + Add files
@@ -41,8 +41,8 @@
   <div class="retro-chrome overflow-hidden rounded-lg">
     {#each $playlist as track, i (track.path)}
       <button
-        class="group flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-zinc-800/60 {$currentIndex === i
-          ? 'bg-zinc-800/80'
+        class="group flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-gray-800/60 {$currentIndex === i
+          ? 'bg-gray-800/80'
           : ''}"
         onclick={() => select(i)}
       >
@@ -51,22 +51,22 @@
           {#if $currentIndex === i && $playing}
             <span class="now-playing" aria-label="playing"><i></i><i></i><i></i></span>
           {:else}
-            <span class="text-xs tabular-nums text-zinc-600 group-hover:text-zinc-400">{i + 1}</span>
+            <span class="text-xs tabular-nums text-gray-500 group-hover:text-gray-400">{i + 1}</span>
           {/if}
         </span>
         <span class="min-w-0 flex-1">
-          <span class="block truncate text-sm {$currentIndex === i ? 'text-cyan-300' : 'text-zinc-200'}">{track.title}</span>
-          {#if track.artist}<span class="block truncate text-[11px] text-zinc-500">{track.artist}</span>{/if}
+          <span class="block truncate text-sm {$currentIndex === i ? 'text-lime-300' : 'text-gray-200'}">{track.title}</span>
+          {#if track.artist}<span class="block truncate text-[11px] text-gray-500">{track.artist}</span>{/if}
         </span>
-        <span class="shrink-0 text-xs tabular-nums text-zinc-500">{fmt(track.duration_secs)}</span>
+        <span class="shrink-0 text-xs tabular-nums text-gray-500">{fmt(track.duration_secs)}</span>
       </button>
     {:else}
       <div class="flex flex-col items-center gap-3 px-4 py-12 text-center">
         <span class="text-3xl opacity-40">🎵</span>
-        <div class="text-sm text-zinc-500">No tracks yet</div>
-        <div class="text-[11px] text-zinc-600">Drag audio files onto the window, or</div>
+        <div class="text-sm text-gray-500">No tracks yet</div>
+        <div class="text-[11px] text-gray-500">Drag audio files onto the window, or</div>
         <button
-          class="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700"
+          class="rounded-lg bg-gray-800 px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700"
           onclick={addFiles}>Add files</button
         >
       </div>

@@ -17,35 +17,46 @@ body,
   flex-direction: column;
 }
 
-/* --- P5.5 retro Winamp-ish skin layer (additive; doesn't override Tailwind) --- */
+/*
+ * Joko UI (jokoui.web.id) dark-mode token mapping, applied to the existing
+ * Tailwind utility usage. Joko UI dark surfaces: gray-900 base, gray-800
+ * cards, gray-700 borders, gray-400 secondary text. Accent: lime-500/600
+ * (primary buttons, toggles, focus rings); indigo-600 for selected nav.
+ * Old zinc/emerald "retro" palette kept only inside .lcd (now-playing readout).
+ */
 html,
 body {
-  background:
-    radial-gradient(120% 80% at 50% -10%, #1f2937 0%, #09090b 55%, #000 100%);
+  background: #111827; /* gray-900 */
 }
 
-/* LCD readout: green-on-black monospace with a soft glow, for now-playing + timers. */
+/* Panel = Joko UI card surface: gray-800 on gray-900, gray-700 border. */
+.retro-chrome {
+  background: #1f2937; /* gray-800 */
+  border: 1px solid #374151; /* gray-700 */
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* LCD readout keeps the broadcast-desk personality; lime glow to match accent. */
 .lcd {
   font-family: 'DejaVu Sans Mono', 'Consolas', ui-monospace, monospace;
-  background: linear-gradient(#0a1410, #050a08);
-  border: 1px solid #064e3b;
-  border-radius: 4px;
+  background: #030712; /* gray-950 */
+  border: 1px solid #374151; /* gray-700 */
+  border-radius: 0.5rem;
   padding: 4px 8px;
-  box-shadow: inset 0 0 8px rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  text-shadow: 0 0 6px rgba(52, 211, 153, 0.65);
+  color: #bef264; /* lime-300 */
+  text-shadow: 0 0 6px rgba(163, 230, 53, 0.45);
 }
 
-/* Chrome bevel for panels. */
-.retro-chrome {
-  background: linear-gradient(#18181b, #0c0c0e);
-  border: 1px solid #27272a;
-  border-top-color: #3f3f46;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 6px 14px rgba(0, 0, 0, 0.5);
-}
-
-/* Range thumbs get the LED accent across browsers. */
+/* Range thumbs + toggles use the lime accent like Joko UI toggles. */
 input[type='range'] {
-  accent-color: #10b981;
+  accent-color: #84cc16; /* lime-600 */
 }
 
+/* Focus rings on inputs/buttons: lime like Joko UI focus:ring-lime-500. */
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid #84cc16; /* lime-600 */
+  outline-offset: 1px;
+}

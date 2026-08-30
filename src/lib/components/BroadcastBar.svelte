@@ -87,16 +87,16 @@
 
 <div class="retro-chrome rounded-lg p-4">
   <div class="mb-3 flex items-center justify-between">
-    <h3 class="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Broadcast</h3>
+    <h3 class="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Broadcast</h3>
     <!-- On-air indicator -->
     <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
       <span class="relative flex h-3 w-3">
         {#if connected}
           <span class="onair-ping absolute inline-flex h-full w-full rounded-full bg-red-500"></span>
         {/if}
-        <span class="relative inline-flex h-3 w-3 rounded-full {connected ? 'bg-red-500' : 'bg-zinc-600'}"></span>
+        <span class="relative inline-flex h-3 w-3 rounded-full {connected ? 'bg-red-500' : 'bg-gray-600'}"></span>
       </span>
-      <span class={connected ? 'text-red-400' : 'text-zinc-500'}>{connected ? 'ON AIR' : 'OFF AIR'}</span>
+      <span class={connected ? 'text-red-400' : 'text-gray-500'}>{connected ? 'ON AIR' : 'OFF AIR'}</span>
     </div>
   </div>
 
@@ -104,9 +104,9 @@
     <!-- Left: server + codec + bitrate -->
     <div class="space-y-2 text-xs">
       <label class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">Server</span>
+        <span class="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Server</span>
         <select
-          class="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-zinc-200"
+          class="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-200"
           bind:value={selected}
           disabled={connected}
         >
@@ -116,9 +116,9 @@
       </label>
       <div class="grid grid-cols-2 gap-2">
         <label class="block">
-          <span class="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">Codec</span>
+          <span class="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Codec</span>
           <select
-            class="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-zinc-200"
+            class="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-200"
             bind:value={$codec}
             onchange={onCodecChange}
           >
@@ -127,9 +127,9 @@
           </select>
         </label>
         <label class="block">
-          <span class="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">Bitrate</span>
+          <span class="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Bitrate</span>
           <select
-            class="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-zinc-200"
+            class="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-200"
             bind:value={$bitrate}
             onchange={onBitrateChange}
           >
@@ -144,14 +144,14 @@
       <button
         class="flex-1 rounded-lg text-sm font-bold uppercase tracking-wider transition-all
           {connected
-            ? 'bg-red-700 text-white hover:bg-red-600 active:scale-[0.98]'
-            : 'bg-gradient-to-b from-emerald-500 to-emerald-700 text-white hover:from-emerald-400 hover:to-emerald-600 active:scale-[0.98]'}"
+            ? 'bg-red-600 text-white shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-900 active:scale-[0.98]'
+            : 'bg-lime-600 text-white shadow-md hover:bg-lime-700 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:ring-offset-2 focus:ring-offset-gray-900 active:scale-[0.98]'}"
         onclick={toggle}
         disabled={busy}
       >
         {busy ? '…' : label}
       </button>
-      <div class="mt-2 text-center text-[10px] uppercase tracking-wider text-zinc-500">
+      <div class="mt-2 text-center text-[10px] uppercase tracking-wider text-gray-500">
         {#if connected}
           {$codec.toUpperCase()} · {$bitrate} kbps
         {:else if $streamStatus.state === 'error'}
@@ -161,7 +161,7 @@
         {/if}
       </div>
       {#if connected}
-        <div class="mt-1 text-[10px] tabular-nums text-cyan-400">{statsLine}</div>
+        <div class="mt-1 text-[10px] tabular-nums text-lime-400">{statsLine}</div>
       {/if}
     </div>
   </div>
@@ -169,17 +169,17 @@
   <!-- Stream title (songtitle): Ultravox sends it in-band (0x3902); Icecast uses
        the /admin/metadata endpoint. Both reuse the source/DJ creds — no separate
        admin password. -->
-  <div class="mt-3 border-t border-zinc-800 pt-3">
-    <span class="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">Stream title</span>
+  <div class="mt-3 border-t border-gray-700 pt-3">
+    <span class="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Stream title</span>
     <div class="flex gap-2">
       <input
-        class="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200"
+        class="min-w-0 flex-1 rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-xs text-gray-200"
         placeholder={$streamTitle || 'song / show name'}
         bind:value={titleDraft}
         onkeydown={(e) => e.key === 'Enter' && sendTitle()}
       />
       <button
-        class="rounded bg-cyan-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-600 disabled:opacity-40"
+        class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600"
         onclick={sendTitle}
         disabled={!connected || metaStatus === 'sending'}
       >
@@ -187,7 +187,7 @@
       </button>
     </div>
     {#if metaStatus === 'ok'}
-      <div class="mt-1 text-[10px] text-emerald-400">✓ Title sent to server</div>
+      <div class="mt-1 text-[10px] text-lime-400">✓ Title sent to server</div>
     {:else if metaStatus === 'err'}
       <div class="mt-1 text-[10px] text-red-400">✕ Update failed</div>
     {/if}

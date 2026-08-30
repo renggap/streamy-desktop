@@ -44,30 +44,30 @@
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
     <div class="retro-chrome w-full max-w-md rounded-xl p-6">
       <div class="mb-3 flex items-center gap-3">
-        <span class="flex h-11 w-11 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-600 to-cyan-600 text-xl text-white">📡</span>
+        <span class="flex h-11 w-11 items-center justify-center rounded-lg bg-gradient-to-br from-lime-600 to-lime-600 text-xl text-white">📡</span>
         <div>
-          <div class="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-lg font-extrabold text-transparent">
+          <div class="bg-gradient-to-r from-lime-300 to-lime-400 bg-clip-text text-lg font-extrabold text-transparent">
             Welcome to Streamy Desktop
           </div>
-          <div class="text-[10px] uppercase tracking-[0.3em] text-zinc-500">broadcast · mix · record</div>
+          <div class="text-[10px] uppercase tracking-[0.3em] text-gray-500">broadcast · mix · record</div>
         </div>
       </div>
 
       <p class="text-xs leading-relaxed text-amber-300">
         The Microsoft WebView2 runtime wasn't found on this PC. Streamy needs it to run.
       </p>
-      <p class="mt-2 text-xs leading-relaxed text-zinc-500">
+      <p class="mt-2 text-xs leading-relaxed text-gray-500">
         Click repair below — it downloads the official installer with a progress bar and installs
         the runtime. Then relaunch Streamy.
       </p>
 
-      <div class="mt-4 border-t border-zinc-800 pt-4">
+      <div class="mt-4 border-t border-gray-700 pt-4">
         <WebView2Repair />
       </div>
 
       <div class="mt-5 flex justify-end">
         <button
-          class="rounded-lg bg-zinc-800 px-4 py-2 text-xs font-semibold text-zinc-200 hover:bg-zinc-700"
+          class="rounded-lg bg-gray-800 px-4 py-2 text-xs font-semibold text-gray-200 hover:bg-gray-700"
           onclick={dismiss}>Dismiss</button
         >
       </div>

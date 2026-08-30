@@ -55,10 +55,10 @@
   }
 </script>
 
-<header class="border-b border-zinc-800 px-4 py-3">
+<header class="border-b border-gray-700 px-4 py-3">
   <div class="flex items-center gap-3">
     <div
-      class="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-gradient-to-br from-emerald-600 to-cyan-600 text-lg text-white shadow"
+      class="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-gradient-to-br from-lime-600 to-lime-600 text-lg text-white shadow"
     >
       ♪
     </div>
@@ -68,26 +68,26 @@
       </div>
       <div class="truncate text-xs opacity-80">{$nowPlaying?.artist || '—'}</div>
     </div>
-    <button class="rounded p-2 text-zinc-300 hover:bg-zinc-800" onclick={() => prev()} aria-label="Previous"
+    <button class="rounded p-2 text-gray-300 hover:bg-gray-800" onclick={() => prev()} aria-label="Previous"
       >⏮</button
     >
     <button
-      class="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 hover:bg-white"
+      class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-900 hover:bg-white"
       onclick={toggle}
       aria-label="{$playing ? 'Pause' : 'Play'}"
     >
       {$playing ? '⏸' : '▶'}
     </button>
-    <button class="rounded p-2 text-zinc-300 hover:bg-zinc-800" onclick={() => next()} aria-label="Next"
+    <button class="rounded p-2 text-gray-300 hover:bg-gray-800" onclick={() => next()} aria-label="Next"
       >⏭</button
     >
   </div>
 
-  <div class="mt-3 flex items-center gap-2 text-[10px] tabular-nums text-zinc-500">
+  <div class="mt-3 flex items-center gap-2 text-[10px] tabular-nums text-gray-500">
     <span class="w-8 text-right">{fmt(elapsed)}</span>
     <div
       bind:this={trackEl}
-      class="group relative h-1.5 flex-1 cursor-pointer rounded-full bg-zinc-800"
+      class="group relative h-1.5 flex-1 cursor-pointer rounded-full bg-gray-800"
       onpointerdown={down}
       onpointermove={move}
       onpointerup={up}
@@ -100,11 +100,11 @@
       aria-valuenow={pct}
     >
       <div
-        class="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
+        class="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-lime-600 to-lime-400"
         style="width: {pct}%"
       ></div>
       <div
-        class="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow ring-2 ring-cyan-400 transition-transform group-hover:scale-110"
+        class="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow ring-2 ring-lime-400 transition-transform group-hover:scale-110"
         style="left: {pct}%"
       ></div>
     </div>
@@ -112,7 +112,7 @@
   </div>
 
   <div class="mt-2 flex items-center gap-2">
-    <span class="text-[10px] uppercase tracking-wider text-zinc-500">File vol</span>
+    <span class="text-[10px] uppercase tracking-wider text-gray-500">File vol</span>
     <input
       type="range"
       min="0"
@@ -123,7 +123,7 @@
       class="streamy-range flex-1"
       aria-label="Local file volume"
     />
-    <span class="w-10 text-right text-[10px] tabular-nums text-zinc-500">{$monitorFileVolume}%</span>
+    <span class="w-10 text-right text-[10px] tabular-nums text-gray-500">{$monitorFileVolume}%</span>
   </div>
 </header>
 
