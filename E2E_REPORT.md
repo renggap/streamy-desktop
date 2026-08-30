@@ -31,3 +31,17 @@ Harness notes this round: app launch requires `DISPLAY=:99` explicitly in env (`
 DISPLAY=:99 ...`); vite dev server dies with `tauri dev` kill and must be restarted before
 relaunch or webview renders black. GTK file dialog renders mostly black on Xvfb (no WM)
 but is functional. Web Inspector overlaps app at +0+0 — move to 900,100 before screenshots.
+
+### Edge-case round (2026-08-30, follow-up)
+
+- Corrupt playlist.json: app boots, logs `WARN: playlist.json corrupt; starting empty`,
+  UI shows 0 tracks, no crash. PASS.
+- Restored playlist.json: 3 tracks return; clicking a persisted track plays it
+  (NowPlaying updated, position advances). PASS.
+- Clean connect -> ON AIR green; disconnect -> OFF AIR; indicator and button states flip
+  correctly. PASS. (Known pre-existing quirk: rapid double-click on CONNECT/DISCONNECT can
+  race the busy state and leave broadcast idle with a stale error banner; needs a fresh
+  app relaunch or webview reload to clear. Not introduced by feedback changes; candidate
+  for a `busy` guard fix later.)
+- Wrong-shape playlist.json (valid JSON, wrong schema): covered by new unit test
+  `wrong_shape_playlist_json_loads_empty`. 52 lib tests green.

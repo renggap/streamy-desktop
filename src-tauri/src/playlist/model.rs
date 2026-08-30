@@ -107,4 +107,15 @@ mod tests {
         let p = Playlist::load_from(std::path::Path::new("/nonexistent-streamy-dir"));
         assert!(p.tracks.is_empty());
     }
+
+    #[test]
+    fn wrong_shape_playlist_json_loads_empty() {
+        // Valid JSON, wrong shape (bare array of strings) must not panic.
+        let dir = std::env::temp_dir().join(format!("streamy-pl-shape-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("playlist.json"), r#"["a.mp3","b.mp3"]"#).unwrap();
+        let p = Playlist::load_from(&dir);
+        assert!(p.tracks.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
