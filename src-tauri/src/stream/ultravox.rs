@@ -153,8 +153,8 @@ pub async fn connect(cfg: &UltravoxConfig) -> Result<TcpStream, String> {
     send_control(&mut s, 0x1009, b"2.1\0".to_vec()).await?;
     let cipher_resp = expect_ack(&mut s, "cipher").await?;
     let key = cipher_resp
-        .splitn(2, ':')
-        .nth(1)
+        .split_once(':')
+        .map(|(_, k)| k)
         .unwrap_or("")
         .as_bytes()
         .to_vec();

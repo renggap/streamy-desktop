@@ -28,33 +28,24 @@ async fn run_server(
     total: Arc<AtomicUsize>,
 ) {
     let count = Arc::new(AtomicU32::new(0));
-    loop {
-        let (mut sock, _) = match listener.accept().await {
-            Ok(p) => p,
-            Err(_) => break,
-        };
+    while let Ok((mut sock, _)) = listener.accept().await {
         let idx = count.fetch_add(1, Ordering::SeqCst);
         accept_times.lock().unwrap().push(Instant::now());
         let total = total.clone();
         tokio::spawn(async move {
             let mut data_frames = 0u32;
-            loop {
-                match read_frame(&mut sock).await {
-                    Ok((id, payload)) => {
-                        if id == 0x7000 {
-                            total.fetch_add(payload.len(), Ordering::SeqCst);
-                            data_frames += 1;
-                            // Drop connections bow out after a little real data,
-                            // so the client's next write observes the close.
-                            if idx < drops && data_frames >= drop_after {
-                                break;
-                            }
-                        } else {
-                            // ACK every control frame (id unchecked by client).
-                            let _ = sock.write_all(&encode_frame(0x0000, b"ACK\0")).await;
-                        }
+            while let Ok((id, payload)) = read_frame(&mut sock).await {
+                if id == 0x7000 {
+                    total.fetch_add(payload.len(), Ordering::SeqCst);
+                    data_frames += 1;
+                    // Drop connections bow out after a little real data,
+                    // so the client's next write observes the close.
+                    if idx < drops && data_frames >= drop_after {
+                        break;
                     }
-                    Err(_) => break,
+                } else {
+                    // ACK every control frame (id unchecked by client).
+                    let _ = sock.write_all(&encode_frame(0x0000, b"ACK\0")).await;
                 }
             }
         });

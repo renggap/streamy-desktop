@@ -69,7 +69,6 @@ async fn handshake_reports_rejection() {
 
     let err = connect(&cfg(addr.ip().to_string(), addr.port()))
         .await
-        .err()
-        .expect("expected rejection");
+        .expect_err("expected rejection");
     assert!(err.contains("authentication failed"), "unexpected: {err}");
 }

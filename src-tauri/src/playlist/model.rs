@@ -14,6 +14,12 @@ pub struct Playlist {
     pub current: Option<usize>,
 }
 
+impl Default for Playlist {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Playlist {
     pub fn new() -> Self {
         Self {

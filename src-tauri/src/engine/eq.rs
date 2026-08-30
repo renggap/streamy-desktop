@@ -110,7 +110,7 @@ impl Biquad {
 fn shelf_params(sample_rate: f64, freq: f64, gain_db: f64) -> (f64, f64, f64, f64) {
     let a = 10.0_f64.powf(gain_db / 40.0);
     let w0 = 2.0 * std::f64::consts::PI * freq / sample_rate;
-    (a, w0.cos(), w0.sin(), 0.7071067811865476) // shelf slope ~0.5 (Butterworth Q)
+    (a, w0.cos(), w0.sin(), std::f64::consts::FRAC_1_SQRT_2) // shelf slope ~0.5 (Butterworth Q)
 }
 
 /// 3-band EQ: low shelf (bass), peaking (mid), high shelf (treble).

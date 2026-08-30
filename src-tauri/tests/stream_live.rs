@@ -39,7 +39,7 @@ fn one_second_tone_mp3() -> Vec<u8> {
     let sr = 44_100usize;
     let mut samples = Vec::with_capacity(sr * 2);
     for i in 0..sr {
-        let v = (0.9 * (2.0 * PI * 440.0 * i as f32 / sr as f32).sin()) as f32;
+        let v = 0.9 * (2.0 * PI * 440.0 * i as f32 / sr as f32).sin();
         samples.push(v);
         samples.push(v);
     }

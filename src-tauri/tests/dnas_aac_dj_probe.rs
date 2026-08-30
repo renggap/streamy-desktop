@@ -76,7 +76,7 @@ async fn dnas_aac_dj_bitrate_probe() {
         let mut samples = Vec::with_capacity((end - i) * 2);
         for n in i..end {
             let t = n as f32 / SAMPLE_RATE as f32;
-            let v = (0.5 * (2.0 * std::f32::consts::PI * 440.0 * t).sin()) as f32;
+            let v = 0.5 * (2.0 * std::f32::consts::PI * 440.0 * t).sin();
             samples.push(v);
             samples.push(v);
         }

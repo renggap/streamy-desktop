@@ -12,7 +12,7 @@ fn encode_sine_produces_adts_frames_and_expected_size() {
     let n = sr as usize * secs; // stereo frames
     let mut samples = Vec::with_capacity(n * 2);
     for i in 0..n {
-        let v = (0.9 * (2.0 * std::f32::consts::PI * 440.0 * (i as f32) / sr as f32).sin()) as f32;
+        let v = 0.9 * (2.0 * std::f32::consts::PI * 440.0 * (i as f32) / sr as f32).sin();
         samples.push(v);
         samples.push(v);
     }

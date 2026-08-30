@@ -146,25 +146,20 @@ pub fn prev(
     engine: State<'_, AudioEngine>,
     app: AppHandle,
 ) -> Result<(), String> {
+    // Compute and advance `current` under one lock — a second lock can race a
+    // concurrent next()/play_index() and play the wrong track.
     let track = {
-        let p = playlist.lock().map_err(|e| e.to_string())?;
+        let mut p = playlist.lock().map_err(|e| e.to_string())?;
         let i = match p.current {
             Some(i) if i > 0 => Some(i - 1),
             _ => None,
         };
-        match i {
-            Some(j) => p.tracks.get(j).cloned(),
-            None => None,
+        if let Some(j) = i {
+            p.current = Some(j);
         }
+        i.and_then(|j| p.tracks.get(j).cloned())
     };
     if let Some(t) = track {
-        let mut p = playlist.lock().map_err(|e| e.to_string())?;
-        if let Some(j) = p.current {
-            if j > 0 {
-                p.current = Some(j - 1);
-            }
-        }
-        drop(p);
         return play_at(&engine, &app, &t);
     }
     Ok(())
@@ -298,6 +293,18 @@ pub fn delete_profile(name: String, store: State<'_, ProfileStore>) -> Result<()
 
 // --- P2.2 connect / disconnect (Ultravox broadcast) ---
 
+/// Lifecycle of the broadcast connection. A plain `Option<BroadcastHandle>`
+/// had a race: check(is-none) → install-producer → start → store is not
+/// atomic, so a `disconnect_stream` landing mid-connect could clear the
+/// producer after `connect_stream` installed it — UI stuck "ON AIR" with a
+/// dead stream. `Connecting` makes the intent visible so whichever side runs
+/// second cleans up.
+pub enum BcastState {
+    Idle,
+    Connecting,
+    Connected(BroadcastHandle),
+}
+
 #[tauri::command]
 pub async fn connect_stream(
     name: String,
@@ -305,22 +312,45 @@ pub async fn connect_stream(
     codec: Codec,
     engine: State<'_, AudioEngine>,
     profiles: State<'_, ProfileStore>,
-    bcast: State<'_, Mutex<Option<BroadcastHandle>>>,
+    bcast: State<'_, Mutex<BcastState>>,
     app: AppHandle,
 ) -> Result<(), String> {
     {
-        let g = bcast.lock().map_err(|e| e.to_string())?;
-        if g.is_some() {
+        let mut g = bcast.lock().map_err(|e| e.to_string())?;
+        if !matches!(*g, BcastState::Idle) {
             return Err("already connected".into());
         }
+        *g = BcastState::Connecting;
     }
     diag::log(format!("connect_stream -> '{name}' @ {bitrate_kbps} kbps {codec:?}"));
+    let result = connect_stream_inner(&name, bitrate_kbps, codec, &engine, &profiles, &bcast, &app).await;
+    if result.is_err() {
+        // Roll Connecting back unless a disconnect already set Idle (it then
+        // owns the cleanup).
+        if let Ok(mut g) = bcast.lock() {
+            if matches!(*g, BcastState::Connecting) {
+                *g = BcastState::Idle;
+            }
+        }
+    }
+    result
+}
+
+async fn connect_stream_inner(
+    name: &str,
+    bitrate_kbps: u32,
+    codec: Codec,
+    engine: &AudioEngine,
+    profiles: &ProfileStore,
+    bcast: &Mutex<BcastState>,
+    app: &AppHandle,
+) -> Result<(), String> {
     let profile = profiles
         .list()
         .into_iter()
         .find(|p| p.name == name)
         .ok_or_else(|| format!("no profile named {name}"))?;
-    let password = profiles.get_password(&name)?;
+    let password = profiles.get_password(name)?;
     let content_type = match codec {
         Codec::Mp3 => "audio/mpeg",
         Codec::Aac => "audio/aacp",
@@ -377,10 +407,36 @@ pub async fn connect_stream(
 
     let (tx, rx) = rtrb::RingBuffer::<[f32; 2]>::new(16384);
     engine.set_broadcast_producer(Some(tx));
-    match broadcast::start(rx, stream_cfg, enc_cfg, Some(app)).await {
+    match broadcast::start(rx, stream_cfg, enc_cfg, Some(app.clone())).await {
         Ok(h) => {
-            if let Ok(mut g) = bcast.lock() {
-                *g = Some(h);
+            // Decide under the lock, drop it, then await. MutexGuard is not
+            // Send and must never be held across an await.
+            enum Commit {
+                Store,
+                TearDown,
+            }
+            let action = {
+                let g = bcast.lock().map_err(|e| e.to_string())?;
+                match *g {
+                    // A concurrent disconnect ran while we were starting: it
+                    // already cleared the producer; tear this fresh connection
+                    // down instead of leaking an ON-AIR state with no consumer.
+                    BcastState::Idle => Commit::TearDown,
+                    // Still ours (Connecting): commit the handle.
+                    BcastState::Connecting => Commit::Store,
+                    // A second connect raced past the guard — shouldn't happen.
+                    BcastState::Connected(_) => Commit::TearDown,
+                }
+            };
+            match action {
+                Commit::Store => {
+                    let mut g = bcast.lock().map_err(|e| e.to_string())?;
+                    *g = BcastState::Connected(h);
+                }
+                Commit::TearDown => {
+                    engine.set_broadcast_producer(None);
+                    h.stop().await;
+                }
             }
             Ok(())
         }
@@ -394,14 +450,25 @@ pub async fn connect_stream(
 #[tauri::command]
 pub async fn disconnect_stream(
     engine: State<'_, AudioEngine>,
-    bcast: State<'_, Mutex<Option<BroadcastHandle>>>,
+    bcast: State<'_, Mutex<BcastState>>,
     app: AppHandle,
 ) -> Result<(), String> {
-    let h = bcast.lock().map_err(|e| e.to_string())?.take();
+    let h = {
+        let mut g = bcast.lock().map_err(|e| e.to_string())?;
+        match std::mem::replace(&mut *g, BcastState::Idle) {
+            BcastState::Connected(h) => Some(h),
+            other => {
+                *g = other; // keep Connecting/Idle as-is
+                None
+            }
+        }
+    };
+    // Clear the producer BEFORE stopping: after Disconnect returns, the audio
+    // callback must not keep pushing into a dead ring.
+    engine.set_broadcast_producer(None);
     if let Some(h) = h {
         h.stop().await;
     }
-    engine.set_broadcast_producer(None);
     let _ = app.emit(events::STREAM_STATUS, StreamStatus::Disconnected);
     Ok(())
 }
@@ -435,16 +502,16 @@ pub fn looks_like_pe_exe(bytes: &[u8]) -> bool {
 #[tauri::command]
 pub async fn set_stream_title(
     title: String,
-    bcast: State<'_, Mutex<Option<BroadcastHandle>>>,
+    bcast: State<'_, Mutex<BcastState>>,
 ) -> Result<(), String> {
     let title = clamp_title(title);
     // Pull what we need under a brief lock; never await while holding it (the
     // Icecast metadata round-trip can take up to its 5s timeout).
     let (ice_admin, uvox_tx) = {
         let g = bcast.lock().map_err(|e| e.to_string())?;
-        match g.as_ref() {
-            Some(h) => (h.icecast_admin.clone(), Some(h.metadata_tx.clone())),
-            None => (None, None),
+        match &*g {
+            BcastState::Connected(h) => (h.icecast_admin.clone(), Some(h.metadata_tx.clone())),
+            _ => (None, None),
         }
     };
     match (ice_admin, uvox_tx) {
@@ -552,6 +619,9 @@ pub async fn stop_recording(
         return Ok(()); // not recording — no-op
     };
     let path = slot.path.clone();
+    // slot already taken above; join happens in handle.stop(). The recorder's
+    // on_error hook may emit RECORDING_STATUS concurrently — fine, we hold no
+    // lock while joining.
     match slot.handle.stop() {
         Ok(()) => {
             let _ = app.emit(
@@ -624,7 +694,7 @@ fn is_webview2_installed() -> bool {
 /// download/install progress.
 #[tauri::command]
 pub async fn repair_webview2(app: AppHandle) -> Result<String, String> {
-    diag::log("repair_webview2 -> downloading bootstrapper".to_string());
+    diag::log("repair_webview2 -> downloading bootstrapper");
     let resp = reqwest::get(WV2_BOOTSTRAPPER_URL)
         .await
         .map_err(|e| format!("download failed: {e}"))?

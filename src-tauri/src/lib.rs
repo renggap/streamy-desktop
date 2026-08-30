@@ -57,7 +57,7 @@ pub fn run() {
         ])
         .manage(engine::engine::AudioEngine::new())
         .manage(std::sync::Mutex::new(
-            None::<stream::broadcast::BroadcastHandle>,
+            commands::BcastState::Idle,
         ))
         .manage(std::sync::Mutex::new(playlist::model::Playlist::new()))
         .manage(std::sync::Mutex::new(
