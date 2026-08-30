@@ -45,7 +45,6 @@
 
 <div class="space-y-2">
   <div class="flex items-center gap-2 text-xs">
-    <span class="text-gray-500">Record</span>
     <select
       class="rounded bg-gray-800 px-2 py-1 text-gray-200"
       bind:value={$recFormat}

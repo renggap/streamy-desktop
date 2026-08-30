@@ -12,7 +12,6 @@
 </script>
 
 <div class="flex items-center gap-1 text-xs">
-  <span class="mr-1 text-gray-500">Source</span>
   {#each modes as m (m)}
     <button
       class="rounded px-2 py-1 capitalize {$sourceMode === m
