@@ -2,12 +2,20 @@
   import { profiles, streamStatus, bitrate, codec, view, errorMsg, streamTitle, streamStats } from '../stores';
   import { connectStream, disconnectStream, setStreamTitle, BITRATES } from '../api';
 
-  let selected = $state('');
+  // ponytail: localStorage is enough; move to profiles.json "last_used" if
+  // selection ever needs to sync with the Rust side.
+  let selected = $state(localStorage.getItem('streamy.profile') ?? '');
   let titleDraft = $state('');
   let metaStatus = $state<'idle' | 'sending' | 'ok' | 'err'>('idle');
   let metaTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
+    if (selected) localStorage.setItem('streamy.profile', selected);
+  });
+
+  $effect(() => {
+    // fall back to first profile on fresh start or if saved profile was deleted
+    if (selected && $profiles.length && !$profiles.some((p) => p.name === selected)) selected = '';
     if (!selected && $profiles.length) selected = $profiles[0].name;
   });
 

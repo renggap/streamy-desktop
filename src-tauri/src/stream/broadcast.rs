@@ -147,6 +147,7 @@ pub async fn start_with_opts(
     let mut source = match connect_source(&cfg, handshake_timeout_secs).await {
         Ok(s) => s,
         Err(e) => {
+            diag::log(format!("initial connect failed: {e}"));
             emit_status(&app, StreamStatus::Error { message: e.clone() });
             return Err(e);
         }
