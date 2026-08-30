@@ -56,3 +56,17 @@ but is functional. Web Inspector overlaps app at +0+0 — move to 900,100 before
 - Note: codec/bitrate selection is session-only (in-memory stores); restart returns to
   AAC/24 default. Matches "default codec AAC 24kbps" requirement — defaults, not
   last-used persistence.
+
+### Acceptance replay (2026-08-30, final)
+
+Cold restart, all four user requirements replayed end-to-end on the live app:
+1. Playlist persistence: 3 tracks listed immediately after fresh launch. PASS.
+2. Stream tab: Codec=AAC, Bitrate=24k defaults shown; Record+Source in one two-column row;
+   CONNECT -> ON AIR lime indicator (282 lime pixels in indicator zone) with ANIMATING
+   heartbeat (frame diffs 3294/1344/4638 across 0.35s-spaced grabs); DISCONNECT -> OFF AIR.
+   PASS.
+3. Window: 384x640 logical on 1280x800 screen = exactly 30% width. PASS.
+4. Version `v1.2.0` rendered under Streamy DESKTOP wordmark, bottom-left. PASS.
+
+All evidence: x11grab pixel measurements + xwininfo geometry from the running binary,
+not inspection of code alone.
