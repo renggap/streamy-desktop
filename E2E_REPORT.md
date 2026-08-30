@@ -45,3 +45,14 @@ but is functional. Web Inspector overlaps app at +0+0 — move to 900,100 before
   for a `busy` guard fix later.)
 - Wrong-shape playlist.json (valid JSON, wrong schema): covered by new unit test
   `wrong_shape_playlist_json_loads_empty`. 52 lib tests green.
+
+### Integration-boundary round (2026-08-30, follow-up 2)
+
+- Codec change while connected (AAC -> MP3 via select popup): liveReconnect fired, stream
+  re-established, status line `MP3 · 24 KBPS · 24.2 kbps` active. PASS.
+- playlist.json with unknown extra fields: loads fine (serde ignores unknown), 3 tracks
+  listed. Forward-compatible. PASS.
+- Release profile: `cargo check --release` clean (2m13s). PASS.
+- Note: codec/bitrate selection is session-only (in-memory stores); restart returns to
+  AAC/24 default. Matches "default codec AAC 24kbps" requirement — defaults, not
+  last-used persistence.
