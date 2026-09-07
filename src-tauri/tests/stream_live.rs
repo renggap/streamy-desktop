@@ -227,3 +227,62 @@ async fn http_get_fetches_dnas_stats_over_tcp() {
     assert!(stats.contains("<BITRATE>32</BITRATE>"));
     assert_eq!(server_bitrate(&stats), "32");
 }
+
+/// Live Icecast test: SOURCE to a real server, verify it accepts audio and
+/// records metadata, then verify the mount disappears after we drop.
+/// Env: STREAMY_HOST/PORT/PASS (source password), mount /audit-icy.mp3.
+///   docker run -d -p 8200:8000 -e ICECAST_SOURCE_PASSWORD=srcpass \
+///     -e ICECAST_ADMIN_PASSWORD=adminpass moul/icecast
+#[tokio::test]
+#[ignore]
+async fn icecast_source_and_metadata_live() {
+    use streamy_desktop::stream::icy::{connect as icy_connect, send_metadata, IcySourceConfig};
+
+    let host = std::env::var("STREAMY_HOST").expect("STREAMY_HOST");
+    let port: u16 = std::env::var("STREAMY_PORT")
+        .expect("STREAMY_PORT")
+        .parse()
+        .expect("port");
+    let pass = std::env::var("STREAMY_PASS").expect("STREAMY_PASS");
+    let admin = std::env::var("STREAMY_ADMIN_PASS").unwrap_or_else(|_| pass.clone());
+
+    let cfg = IcySourceConfig {
+        host: host.clone(),
+        port,
+        mount: "/audit-icy.mp3".into(),
+        user: "source".into(),
+        password: pass,
+        content_type: "audio/mpeg".into(),
+        icy_name: "Streamy audit".into(),
+        icy_genre: "Test".into(),
+        icy_url: "http://streamy".into(),
+        icy_pub: true,
+        icy_br: 128,
+        sample_rate: 44100,
+    };
+
+    let mut s = icy_connect(&cfg).await.expect("ICY handshake");
+    let mp3 = one_second_tone_mp3();
+    for _ in 0..3 {
+        use tokio::io::AsyncWriteExt;
+        s.write_all(&mp3).await.expect("audio write");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    send_metadata(&cfg, "Audit Tone").await.expect("metadata");
+
+    let mut admin_cfg = cfg.clone();
+    admin_cfg.password = admin;
+    // status page of the mount: 200 while source connected
+    let status = http_get(&host, port, "/status.xsl").await;
+    assert!(
+        status.contains("Audit Tone") || status.contains("audit-icy"),
+        "mount not visible in status page"
+    );
+    drop(s);
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let after = http_get(&host, port, "/status.xsl").await;
+    assert!(
+        !after.contains("audit-icy"),
+        "mount still listed after source drop"
+    );
+}

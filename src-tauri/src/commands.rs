@@ -83,7 +83,7 @@ pub fn add_to_playlist(
     // Persist so the playlist survives restarts. Failure is non-fatal (log only).
     if let Ok(data_dir) = app.path().app_data_dir() {
         if let Err(e) = p.save_to(&data_dir) {
-            crate::diag::log(&format!("WARN: playlist save failed: {e}"));
+            crate::diag::log(format!("WARN: playlist save failed: {e}"));
         }
     }
     Ok(p.tracks.clone())
@@ -306,6 +306,7 @@ pub fn delete_profile(name: String, store: State<'_, ProfileStore>) -> Result<()
 /// producer after `connect_stream` installed it — UI stuck "ON AIR" with a
 /// dead stream. `Connecting` makes the intent visible so whichever side runs
 /// second cleans up.
+#[allow(clippy::large_enum_variant)] // Connected handle is rare and boxed by usage
 pub enum BcastState {
     Idle,
     Connecting,

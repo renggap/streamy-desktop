@@ -63,6 +63,7 @@ pub enum StreamConfig {
 /// A live source connection owning its transfer socket. Ultravox keeps
 /// everything on one socket (metadata is in-band); Icecast holds the audio
 /// socket and remembers the admin cfg for metadata GETs.
+#[allow(clippy::large_enum_variant)] // both variants socket-sized; no boxing win
 enum Source {
     Ultravox(TcpStream),
     Icecast {

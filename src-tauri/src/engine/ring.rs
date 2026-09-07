@@ -23,6 +23,9 @@ pub struct StereoRingConsumer {
 pub struct StereoRing;
 
 impl StereoRing {
+    /// Named `new` for call-site ergonomics; returns a (producer, consumer)
+    /// pair rather than `Self` by design.
+    #[allow(clippy::new_without_default, clippy::new_ret_no_self)]
     pub fn new(frames: usize) -> (StereoRingProducer, StereoRingConsumer) {
         let q = Arc::new(ArrayQueue::new(frames.max(1)));
         (
@@ -49,6 +52,11 @@ impl StereoRingConsumer {
     /// Frames currently queued (diagnostics/tests).
     pub fn len(&self) -> usize {
         self.q.len()
+    }
+
+    /// Frames queued == 0.
+    pub fn is_empty(&self) -> bool {
+        self.q.is_empty()
     }
 }
 
