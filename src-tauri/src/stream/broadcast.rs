@@ -23,6 +23,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::diag;
+use crate::engine::ring::StereoRingConsumer;
 use crate::encode::{self, EncoderConfig};
 use crate::events::{self, StreamStats};
 use crate::stream::icy::IcySourceConfig;
@@ -109,7 +110,7 @@ pub struct BroadcastHandle {
 /// Connect and run the encoder + streamer against `rx` (broadcast PCM),
 /// reconnecting with default backoff on mid-stream drops.
 pub async fn start(
-    rx: rtrb::Consumer<[f32; 2]>,
+    rx: StereoRingConsumer,
     cfg: StreamConfig,
     enc_cfg: EncoderConfig,
     app: Option<AppHandle>,
@@ -120,7 +121,7 @@ pub async fn start(
 /// As `start` but with explicit backoff/timeout — used by tests to keep the
 /// reconnect dance fast and deterministic.
 pub async fn start_with_opts(
-    mut rx: rtrb::Consumer<[f32; 2]>,
+    rx: StereoRingConsumer,
     cfg: StreamConfig,
     enc_cfg: EncoderConfig,
     app: Option<AppHandle>,
@@ -189,7 +190,7 @@ pub async fn start_with_opts(
             if stop_enc.load(Ordering::Relaxed) {
                 break;
             }
-            while let Ok(frame) = rx.pop() {
+            while let Some(frame) = rx.pop() {
                 buf.push(frame[0]);
                 buf.push(frame[1]);
                 if buf.len() >= ENCODE_FRAMES * 2 {

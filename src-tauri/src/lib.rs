@@ -60,7 +60,7 @@ pub fn run() {
             commands::BcastState::Idle,
         ))
         .manage(std::sync::Mutex::new(
-            None::<commands::RecSlot>,
+            commands::RecState::Idle,
         ))
         .setup(|app| {
             // Diagnostics log + devtools (debug only).

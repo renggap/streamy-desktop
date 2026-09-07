@@ -412,7 +412,7 @@ async fn connect_stream_inner(
         codec,
     };
 
-    let (tx, rx) = rtrb::RingBuffer::<[f32; 2]>::new(16384);
+    let (tx, rx) = crate::engine::ring::StereoRing::new(16384);
     engine.set_broadcast_producer(Some(tx));
     match broadcast::start(rx, stream_cfg, enc_cfg, Some(app.clone())).await {
         Ok(h) => {
@@ -539,19 +539,30 @@ pub struct RecSlot {
     path: String,
 }
 
+/// Recording lifecycle, mirroring `BcastState`: `Starting` closes the
+/// check-then-set race where two rapid `start_recording` calls both passed an
+/// `is_some()` check and the second overwrote the first record producer ring
+/// (first recorder then drained a dead ring forever).
+pub enum RecState {
+    Idle,
+    Starting,
+    Active(RecSlot),
+}
+
 #[tauri::command]
 pub async fn start_recording(
     format: RecFormat,
     engine: State<'_, AudioEngine>,
     settings: State<'_, SettingsStore>,
-    rec: State<'_, Mutex<Option<RecSlot>>>,
+    rec: State<'_, Mutex<RecState>>,
     app: AppHandle,
 ) -> Result<String, String> {
     {
-        let g = rec.lock().map_err(|e| e.to_string())?;
-        if g.is_some() {
+        let mut g = rec.lock().map_err(|e| e.to_string())?;
+        if !matches!(*g, RecState::Idle) {
             return Err("already recording".into());
         }
+        *g = RecState::Starting;
     }
     // Prefer the user-chosen recording folder; fall back to <app-data>/recordings.
     let rec_dir = match settings.get().recording_dir {
@@ -578,7 +589,7 @@ pub async fn start_recording(
         bitrate_kbps: 192,
         codec: Codec::Mp3,
     };
-    let (tx, rx) = rtrb::RingBuffer::<[f32; 2]>::new(16384);
+    let (tx, rx) = crate::engine::ring::StereoRing::new(16384);
     engine.set_record_producer(Some(tx));
 
     // Surface disk-full / write errors immediately via the event.
@@ -593,12 +604,29 @@ pub async fn start_recording(
 
     match crate::record::start_file(rx, format, enc_cfg, rate, &path_str, Some(on_error)) {
         Ok(h) => {
-            if let Ok(mut g) = rec.lock() {
-                *g = Some(RecSlot {
-                    handle: h,
-                    path: path_str.clone(),
-                });
+            // Commit under the lock; if a concurrent stop ran during setup it
+            // already cleared the producer and set Idle — honor that and tear
+            // the fresh recorder down instead of leaking an Active take.
+            let commit = {
+                let mut g = rec.lock().map_err(|e| e.to_string())?;
+                match std::mem::replace(&mut *g, RecState::Idle) {
+                    RecState::Starting => false,
+                    RecState::Active(slot) => {
+                        *g = RecState::Active(slot);
+                        false
+                    }
+                    RecState::Idle => true, // stop won; tear down below
+                }
+            };
+            if commit {
+                engine.set_record_producer(None);
+                let _ = h.stop();
+                return Ok(path_str);
             }
+            *rec.lock().map_err(|e| e.to_string())? = RecState::Active(RecSlot {
+                handle: h,
+                path: path_str.clone(),
+            });
             let _ = app.emit(
                 events::RECORDING_STATUS,
                 RecordingStatus::Recording {
@@ -609,6 +637,12 @@ pub async fn start_recording(
         }
         Err(e) => {
             engine.set_record_producer(None);
+            // Roll Starting back unless stop already set Idle.
+            if let Ok(mut g) = rec.lock() {
+                if matches!(*g, RecState::Starting) {
+                    *g = RecState::Idle;
+                }
+            }
             Err(e)
         }
     }
@@ -617,10 +651,22 @@ pub async fn start_recording(
 #[tauri::command]
 pub async fn stop_recording(
     engine: State<'_, AudioEngine>,
-    rec: State<'_, Mutex<Option<RecSlot>>>,
+    rec: State<'_, Mutex<RecState>>,
     app: AppHandle,
 ) -> Result<(), String> {
-    let slot = rec.lock().map_err(|e| e.to_string())?.take();
+    // Take an Active slot only; Starting stays untouched so the in-flight
+    // start sees Idle at commit and cleans itself up.
+    let slot = {
+        let mut g = rec.lock().map_err(|e| e.to_string())?;
+        match std::mem::replace(&mut *g, RecState::Idle) {
+            RecState::Active(s) => Some(s),
+            RecState::Starting => {
+                *g = RecState::Starting;
+                None
+            }
+            RecState::Idle => None,
+        }
+    };
     engine.set_record_producer(None);
     let Some(slot) = slot else {
         return Ok(()); // not recording — no-op

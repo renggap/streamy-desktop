@@ -43,15 +43,15 @@ fn frame_to_s16le_clamps_and_converts() {
 /// Push `n` silent frames, run WAV, assert header + exact data length.
 #[test]
 fn wav_run_writes_header_and_all_samples() {
-    let (mut tx, mut rx) = rtrb::RingBuffer::<[f32; 2]>::new(32768);
+    let (tx, rx) = streamy_desktop::engine::ring::StereoRing::new(32768);
     let n = 4410 * 2; // 0.2s
     for _ in 0..n {
-        tx.push([0.0, 0.0]).unwrap();
+        tx.push([0.0, 0.0]);
     }
     let stop = AtomicBool::new(true); // already done feeding
     let mut out = std::io::Cursor::new(Vec::<u8>::new());
     run(
-        &mut rx,
+        &rx,
         RecFormat::Wav,
         &EncoderConfig { sample_rate: 44100, channels: 2, bitrate_kbps: 192, codec: Codec::Mp3 },
         44100,
@@ -77,14 +77,14 @@ fn mp3_run_is_byte_identical_to_direct_encode() {
         })
         .collect();
 
-    let (mut tx, mut rx) = rtrb::RingBuffer::<[f32; 2]>::new(32768);
+    let (tx, rx) = streamy_desktop::engine::ring::StereoRing::new(32768);
     for f in &pcm {
-        tx.push(*f).unwrap();
+        tx.push(*f);
     }
     let stop = AtomicBool::new(true);
     let mut rec_out = std::io::Cursor::new(Vec::<u8>::new());
     let cfg = EncoderConfig { sample_rate: 44100, channels: 2, bitrate_kbps: 192, codec: Codec::Mp3 };
-    run(&mut rx, RecFormat::Mp3, &cfg, 44100, &mut rec_out, &stop).unwrap();
+    run(&rx, RecFormat::Mp3, &cfg, 44100, &mut rec_out, &stop).unwrap();
 
     // Direct encode mirroring the recorder's fixed-chunk loop.
     use streamy_desktop::encode::Mp3Encoder;
@@ -142,15 +142,15 @@ impl std::io::Seek for FailingSink {
 /// construction — verified here by run() returning Err, not by panicking.
 #[test]
 fn run_propagates_write_error() {
-    let (mut tx, mut rx) = rtrb::RingBuffer::<[f32; 2]>::new(32768);
+    let (tx, rx) = streamy_desktop::engine::ring::StereoRing::new(32768);
     for i in 0..(4410 * 4) {
         let s = ((i as f32) * 0.01).sin();
-        tx.push([s, s]).unwrap();
+        tx.push([s, s]);
     }
     let stop = AtomicBool::new(false); // keep running so it hits the cap mid-stream
     let mut sink = FailingSink { cap: 4096, written: 0 };
     let cfg = EncoderConfig { sample_rate: 44100, channels: 2, bitrate_kbps: 192, codec: Codec::Mp3 };
-    let res = run(&mut rx, RecFormat::Mp3, &cfg, 44100, &mut sink, &stop);
+    let res = run(&rx, RecFormat::Mp3, &cfg, 44100, &mut sink, &stop);
     assert!(res.is_err(), "write error must propagate, got {res:?}");
     let msg = res.unwrap_err();
     assert!(msg.contains("disk full") || msg.contains("WriteZero") || msg.contains("write"), "msg: {msg}");

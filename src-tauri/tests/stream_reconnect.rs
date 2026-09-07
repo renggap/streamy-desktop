@@ -15,6 +15,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
 use streamy_desktop::encode::{Codec, EncoderConfig};
+use streamy_desktop::engine::ring::StereoRing;
 use streamy_desktop::stream::broadcast;
 use streamy_desktop::stream::ultravox::{encode_frame, read_frame, UltravoxConfig};
 
@@ -69,14 +70,15 @@ fn cfg(port: u16) -> UltravoxConfig {
 
 /// Continuous sine producer into the broadcast ring (stands in for the audio
 /// callback). Stops when `stop` is set.
-fn spawn_producer(mut tx: rtrb::Producer<[f32; 2]>, stop: Arc<AtomicBool>) {
+fn spawn_producer(tx: streamy_desktop::engine::ring::StereoRingProducer, stop: Arc<AtomicBool>) {
     std::thread::spawn(move || {
         let mut i = 0u32;
         while !stop.load(Ordering::Relaxed) {
             let s = ((i as f32) * 2.0 * std::f32::consts::PI * 440.0 / 44100.0).sin() * 0.3;
-            if tx.push([s, s]).is_err() {
-                // Ring full — encoder will drain it; back off briefly.
-                std::thread::sleep(Duration::from_millis(1));
+            tx.push([s, s]); // drop-oldest ring: never blocks
+            {
+                // Pace near realtime so the encoder sees a realistic feed.
+                std::thread::sleep(Duration::from_micros(20));
             }
             i = i.wrapping_add(1);
         }
@@ -88,7 +90,7 @@ fn spawn_producer(mut tx: rtrb::Producer<[f32; 2]>, stop: Arc<AtomicBool>) {
 /// audio). An invalid bitrate fails `Mp3Encoder::new`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn encoder_init_failure_surfaces_as_error() {
-    let (_, rx) = rtrb::RingBuffer::<[f32; 2]>::new(8192);
+    let (_, rx) = StereoRing::new(8192);
     let enc = EncoderConfig {
         sample_rate: 44100,
         channels: 2,
@@ -129,7 +131,7 @@ async fn reconnects_with_backoff_after_drops() {
     let _srv = tokio::spawn(run_server(listener, drops, 2, times, total_for_srv));
 
     // Keep the encoder fed for the whole test (continuous broadcast bus input).
-    let (tx, rx) = rtrb::RingBuffer::<[f32; 2]>::new(8192);
+    let (tx, rx) = StereoRing::new(8192);
     let prod_stop = Arc::new(AtomicBool::new(false));
     spawn_producer(tx, prod_stop.clone());
 

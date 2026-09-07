@@ -12,6 +12,7 @@ use super::eq::Eq3Band;
 use super::meter::{Meter, Position};
 use super::mic::MicInput;
 use super::mixer::{duck_gain, equal_power, mix_bus, sends_for, SourceMode};
+use super::ring::StereoRingProducer;
 use crate::events;
 
 const FALLBACK_RATE: u32 = 44100;
@@ -87,11 +88,12 @@ struct EngineState {
     cons: rtrb::Consumer<Action>,
     mic_cons: rtrb::Consumer<[f32; 2]>,
     /// When broadcasting, the callback pushes the broadcast bus into this ring
-    /// for the encoder thread to consume.
-    broadcast_tx: Option<rtrb::Producer<[f32; 2]>>,
+    /// for the encoder thread to consume. Drop-oldest overflow (design §7):
+    /// a slow uplink makes the audience skip forward, not freeze.
+    broadcast_tx: Option<StereoRingProducer>,
     /// When recording, the callback taps the same broadcast mix into this ring
     /// for the recorder thread. Independent of `broadcast_tx` (record-only works).
-    record_tx: Option<rtrb::Producer<[f32; 2]>>,
+    record_tx: Option<StereoRingProducer>,
 }
 
 impl EngineState {
@@ -155,11 +157,11 @@ impl EngineState {
             let g = self.volume;
             let mon = [mon[0] * g, mon[1] * g];
             let bcast = [bcast[0] * g, bcast[1] * g];
-            if let Some(tx) = self.broadcast_tx.as_mut() {
-                let _ = tx.push(bcast);
+            if let Some(tx) = self.broadcast_tx.as_ref() {
+                tx.push(bcast);
             }
-            if let Some(tx) = self.record_tx.as_mut() {
-                let _ = tx.push(bcast);
+            if let Some(tx) = self.record_tx.as_ref() {
+                tx.push(bcast);
             }
             self.meter.push(mon, mic_out);
             write_frame(frame, mon[0], mon[1]);
@@ -292,13 +294,13 @@ impl AudioEngine {
     }
 
     /// Install/remove the broadcast-bus producer the callback pushes to.
-    pub fn set_broadcast_producer(&self, tx: Option<rtrb::Producer<[f32; 2]>>) {
+    pub fn set_broadcast_producer(&self, tx: Option<StereoRingProducer>) {
         let mut s = self.state.lock();
         s.broadcast_tx = tx;
     }
 
     /// Install/remove the record-bus producer (PCM tap of the broadcast mix).
-    pub fn set_record_producer(&self, tx: Option<rtrb::Producer<[f32; 2]>>) {
+    pub fn set_record_producer(&self, tx: Option<StereoRingProducer>) {
         let mut s = self.state.lock();
         s.record_tx = tx;
     }
@@ -513,7 +515,12 @@ mod tests {
         concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/tone-60s.mp3")
     }
 
-    fn state_with_rings() -> (EngineState, rtrb::Consumer<[f32; 2]>, rtrb::Consumer<[f32; 2]>) {
+    fn state_with_rings()
+    -> (
+        EngineState,
+        crate::engine::ring::StereoRingConsumer,
+        crate::engine::ring::StereoRingConsumer,
+    ) {
         let mut s = EngineState {
             deck_a: Deck::new(),
             deck_b: Deck::new(),
@@ -539,8 +546,8 @@ mod tests {
         };
         s.deck_a.open(fixture(), 44100).unwrap();
         s.deck_a.playing = true;
-        let (btx, brx) = rtrb::RingBuffer::<[f32; 2]>::new(8192);
-        let (rtx, rrx) = rtrb::RingBuffer::<[f32; 2]>::new(8192);
+        let (btx, brx) = crate::engine::ring::StereoRing::new(8192);
+        let (rtx, rrx) = crate::engine::ring::StereoRing::new(8192);
         s.broadcast_tx = Some(btx);
         s.record_tx = Some(rtx);
         (s, brx, rrx)
@@ -552,10 +559,10 @@ mod tests {
         let mut buf = vec![0.0f32; 8192];
         s.render_buffer(&mut buf, 2);
         let (mut bmax, mut rmax) = (0.0f32, 0.0f32);
-        while let Ok(f) = brx.pop() {
+        while let Some(f) = brx.pop() {
             bmax = bmax.max(f[0].abs()).max(f[1].abs());
         }
-        while let Ok(f) = rrx.pop() {
+        while let Some(f) = rrx.pop() {
             rmax = rmax.max(f[0].abs()).max(f[1].abs());
         }
         assert!(bmax > 0.1, "broadcast ring silent, max={bmax}");
@@ -573,7 +580,7 @@ mod tests {
         let mut buf = vec![0.0f32; 8192];
         s.render_buffer(&mut buf, 2);
         let mut bmax = 0.0f32;
-        while let Ok(f) = brx.pop() {
+        while let Some(f) = brx.pop() {
             bmax = bmax.max(f[0].abs()).max(f[1].abs());
         }
         // Broadcast carries only the tone deck (~0.9 peak at its loudest), not
@@ -599,7 +606,7 @@ mod tests {
             out_max = out_max.max(v.abs());
         }
         let mut bmax = 0.0f32;
-        while let Ok(f) = brx.pop() {
+        while let Some(f) = brx.pop() {
             bmax = bmax.max(f[0].abs()).max(f[1].abs());
         }
         // The fixture is a ~0.62 peak tone. At gain 0.5 monitor should be

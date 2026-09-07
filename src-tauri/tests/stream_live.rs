@@ -140,7 +140,7 @@ async fn broadcast_ring_drives_server_live() {
         codec: Codec::Mp3,
     };
 
-    let (mut tx, rx) = rtrb::RingBuffer::<[f32; 2]>::new(16384);
+    let (tx, rx) = streamy_desktop::engine::ring::StereoRing::new(16384);
     let stop = Arc::new(AtomicBool::new(false));
     let stop_p = stop.clone();
     std::thread::spawn(move || {
@@ -150,7 +150,7 @@ async fn broadcast_ring_drives_server_live() {
             for _ in 0..4410 {
                 // 0.1s of frames
                 let v = (0.9 * (2.0 * std::f64::consts::PI * 440.0 * i as f64 / sr).sin()) as f32;
-                let _ = tx.push([v, v]);
+                tx.push([v, v]);
                 i += 1;
             }
             std::thread::sleep(Duration::from_millis(100));

@@ -15,6 +15,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::encode::{EncoderConfig, Mp3Encoder};
+use crate::engine::ring::StereoRingConsumer;
 
 /// Encode 0.1s of stereo at a time (matches the broadcast encoder granularity).
 const ENC_FRAMES: usize = 4410;
@@ -69,7 +70,7 @@ pub fn wav_header(data_len: u32, sample_rate: u32, channels: u16) -> Vec<u8> {
 /// write/encode error. Generic over the sink so tests can pass an in-memory buffer
 /// or a failing writer (disk-full).
 pub fn run<W: Write + Seek>(
-    rx: &mut rtrb::Consumer<[f32; 2]>,
+    rx: &StereoRingConsumer,
     format: RecFormat,
     enc_cfg: &EncoderConfig,
     sample_rate: u32,
@@ -83,7 +84,7 @@ pub fn run<W: Write + Seek>(
 }
 
 fn run_mp3<W: Write + Seek>(
-    rx: &mut rtrb::Consumer<[f32; 2]>,
+    rx: &StereoRingConsumer,
     enc_cfg: &EncoderConfig,
     out: &mut W,
     stop: &AtomicBool,
@@ -91,7 +92,7 @@ fn run_mp3<W: Write + Seek>(
     let mut enc = Mp3Encoder::new(enc_cfg)?;
     let mut buf: Vec<f32> = Vec::with_capacity(ENC_FRAMES * 2);
     loop {
-        while let Ok(frame) = rx.pop() {
+        while let Some(frame) = rx.pop() {
             buf.push(frame[0]);
             buf.push(frame[1]);
         }
@@ -118,7 +119,7 @@ fn run_mp3<W: Write + Seek>(
 }
 
 fn run_wav<W: Write + Seek>(
-    rx: &mut rtrb::Consumer<[f32; 2]>,
+    rx: &StereoRingConsumer,
     sample_rate: u32,
     out: &mut W,
     stop: &AtomicBool,
@@ -130,7 +131,7 @@ fn run_wav<W: Write + Seek>(
     let mut err: Option<String> = None;
     loop {
         let mut got = false;
-        while let Ok(frame) = rx.pop() {
+        while let Some(frame) = rx.pop() {
             let b = frame_to_s16le(frame);
             if let Err(e) = out.write_all(&b) {
                 err = Some(e.to_string());
@@ -187,7 +188,7 @@ impl RecorderHandle {
 /// Spawn a recorder thread writing to `path`. `on_error` fires once if the run
 /// fails (disk full, etc.) so the UI can react immediately instead of at stop.
 pub fn start_file(
-    mut rx: rtrb::Consumer<[f32; 2]>,
+    rx: StereoRingConsumer,
     format: RecFormat,
     enc_cfg: EncoderConfig,
     sample_rate: u32,
@@ -198,7 +199,7 @@ pub fn start_file(
     let stop = Arc::new(AtomicBool::new(false));
     let stop_clone = stop.clone();
     let join = std::thread::spawn(move || {
-        let res = run(&mut rx, format, &enc_cfg, sample_rate, &mut out, &stop_clone);
+        let res = run(&rx, format, &enc_cfg, sample_rate, &mut out, &stop_clone);
         let _ = out.flush();
         if let Err(ref e) = res {
             if let Some(cb) = on_error {
