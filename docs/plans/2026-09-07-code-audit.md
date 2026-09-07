@@ -218,6 +218,36 @@ vulnerabilities (was 2 dev-only).
 - `cargo test` 90/0, `cargo clippy --all-targets` 0 warnings,
   `svelte-check` 0/0, `vite build` clean (101 kB JS / 33 kB CSS).
 
+
+**Deeper validation pass (follow-up commits `f468840`, `5c84e37`):**
+
+Adversarial tests beyond the happy paths, plus one real defect they caught:
+
+- **Defect found & fixed:** `write_atomic` used a fixed `.json.tmp` name;
+  `ProfileStore` is managed without a mutex, so two concurrent
+  `save_profile` calls could collide on the same tmp (create/rename race).
+  tmp names are now unique per call (`seq ^ pid`); failed writes remove
+  their tmp. Caught by an 8-thread concurrent-writer stress test (which
+  failed against the old implementation, exposing the collision).
+- **Ring:** MPMC two-producer FIFO-per-producer + exact-capacity survival;
+  zero-capacity ring (clamps to 1) keeps only the newest. First MPMC test
+  draft asserted wrong invariants (no consumer run means evictions skip
+  arbitrary prefixes); corrected to per-producer monotonic order.
+- **Mic resampler:** 8k→48k upsample drains at 1/6 rate; same-rate is an
+  exact DC passthrough once the mic path is isolated
+  (`monitor_file_gain = 0` — first draft leaked the deck tone into the
+  assertion); starvation holds the last frame. The 2-frame warmup
+  (zero-initialized window) is documented in-test: ~45 µs at 44.1 kHz.
+- **RecState:** state-machine protocol tests over every start/stop
+  interleaving: stop-during-setup forces start teardown, double-start
+  rejected at entry, stop-on-idle no-op, all interleavings reach a valid state.
+- **Real binary, headless:** 12 s run emits our `audio start failed` line
+  exactly once (was ~12×). ALSA's own lib noise and the GTK init error are
+  external libraries, not ours.
+- **CI matrix run exactly as `test.yml`:** `cargo test --locked` **104/0**
+  (was 90), `npm ci` + `svelte-check` 0/0, `npm audit` 0 vulns,
+  `cargo clippy --all-targets` 0 warnings.
+
 **Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
 hardening in ICY headers, encoder-rate-fallback matching (no user-visible
 defect on supported rates), repeat/shuffle + AAC-record + per-deck-EQ design
