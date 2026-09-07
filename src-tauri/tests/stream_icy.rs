@@ -65,6 +65,11 @@ async fn handshake_reports_rejection() {
         let mut buf = [0u8; 256];
         let _ = sock.read(&mut buf).await;
         sock.write_all(b"HTTP/1.0 401 Unauthorized\r\n\r\n").await.unwrap();
+        // Give the client time to read the response before the drop; an
+        // immediate close can RST unread data on some stacks (seen under
+        // Wine), turning a clean 401 into "connection reset".
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        let _ = sock.shutdown().await;
     });
 
     let err = connect(&cfg(addr.ip().to_string(), addr.port()))

@@ -53,7 +53,20 @@ pub fn write_atomic(path: &std::path::Path, contents: &str) -> std::io::Result<(
         let mut f = std::fs::File::create(&tmp)?;
         f.write_all(contents.as_bytes())?;
         f.sync_all()?;
-        std::fs::rename(&tmp, path)
+        // Windows has no atomic replace-while-dest-open: a concurrent writer
+        // or reader holding the destination yields ERROR_SHARING_VIOLATION /
+        // ACCESS_DENIED. Retry briefly — the other side finishes fast.
+        // ponytail: fixed 10 x 10ms; use ReplaceFile semantics if ever hot.
+        for attempt in 0..10 {
+            match std::fs::rename(&tmp, path) {
+                Ok(()) => return Ok(()),
+                Err(e) if attempt < 9 && e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        unreachable!()
     })();
     if res.is_err() {
         let _ = std::fs::remove_file(&tmp); // don't leak a failed tmp
