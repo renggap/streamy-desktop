@@ -1,0 +1,37 @@
+name: test
+
+# Fast feedback on every push/PR: Rust unit tests + frontend typecheck.
+# Runs on ubuntu (cheap); the Windows release build lives in
+# build-windows.yml.
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  rust-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # Tests are pure-Rust (no display/audio needed: cpal streams never
+      # open in unit tests; the ALSA error-path tests tolerate no device).
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test --locked
+
+  frontend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - run: npm ci
+      - run: npm run check
