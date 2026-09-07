@@ -619,6 +619,89 @@ mod tests {
         (s, brx, rrx)
     }
 
+
+
+
+
+
+
+    #[test]
+    fn mic_resampler_upsample_ratio_drains_slower() {
+        // 8 kHz mic into 48 kHz out: 6x upsample -> output consumes mic
+        // frames at 8000/48000 per output frame.
+        let (mut s, _brx, _rrx) = state_with_rings();
+        let (mtx, mr) = crate::engine::ring::StereoRing::new(65536);
+        for _ in 0..60_000 {
+            mtx.push([0.5, 0.5]);
+        }
+        s.mic_cons = mr;
+        s.mic_rate.store(8_000, Ordering::Relaxed);
+        s.out_rate.store(48_000, Ordering::Relaxed);
+        s.source_mode = SourceMode::Mic;
+        let n = 48_000usize;
+        let mut buf = vec![0.0f32; n * 2];
+        s.render_buffer(&mut buf, 2);
+        let drained = 60_000 - s.mic_cons.len();
+        let expect = (n as f64 * 8_000.0 / 48_000.0) as usize;
+        assert!(
+            (drained as isize - expect as isize).abs() <= 16,
+            "drained {drained}, expected ~{expect}"
+        );
+    }
+
+    #[test]
+    fn mic_resampler_same_rate_is_passthrough_level() {
+        // Equal rates: step=1, interp at integer positions -> output frame
+        // equals input frame (DC level preserved exactly).
+        let (mut s, _brx, _rrx) = state_with_rings();
+        let (mtx, mr) = crate::engine::ring::StereoRing::new(8192);
+        for _ in 0..4_096 {
+            mtx.push([0.25, -0.25]);
+        }
+        s.mic_cons = mr;
+        s.mic_rate.store(44_100, Ordering::Relaxed);
+        s.out_rate.store(44_100, Ordering::Relaxed);
+        s.source_mode = SourceMode::Mic;
+        s.volume = 1.0;
+        s.monitor_file_gain = 0.0; // isolate the mic path from the deck tone
+        let mut buf = vec![0.0f32; 1_024 * 2];
+        s.render_buffer(&mut buf, 2);
+        // Warmup: frame0 emits the zero window; frame1 interpolates 0->0.25
+        // (t=0 after the first advance, so also ~0). Steady state from
+        // frame2 on: exact DC passthrough.
+        for (i, v) in buf.iter().enumerate().skip(4) {
+            let want = if i % 2 == 0 { 0.25 } else { -0.25 };
+            assert!(
+                (v - want).abs() < 1e-6,
+                "frame {i}: got {v}, want {want} (passthrough corrupted)"
+            );
+        }
+    }
+
+    #[test]
+    fn mic_resampler_starvation_holds_last_frame_not_garbage() {
+        // Ring empties mid-buffer: the resampler must hold the last known
+        // frame (unwrap_or(self.mic_next)), never jump to zeros/glitch.
+        let (mut s, _brx, _rrx) = state_with_rings();
+        let (mtx, mr) = crate::engine::ring::StereoRing::new(8192);
+        mtx.push([0.7, 0.7]); // one frame only
+        s.mic_cons = mr;
+        s.mic_rate.store(44_100, Ordering::Relaxed);
+        s.out_rate.store(44_100, Ordering::Relaxed);
+        s.source_mode = SourceMode::Mic;
+        s.volume = 1.0;
+        s.monitor_file_gain = 0.0;
+        let mut buf = vec![0.0f32; 64 * 2];
+        s.render_buffer(&mut buf, 2);
+        // Monitor bus gain for Mic mode: after the 2-frame warmup, a starved
+        // mic must HOLD the last frame (no drop to silence, no glitch).
+        assert!(
+            buf.iter().skip(4).all(|v| *v > 0.05),
+            "starved mic dropped to silence mid-buffer: {:?}",
+            &buf[..8]
+        );
+    }
+
     #[test]
     fn mic_resampler_consumes_at_output_rate() {
         // 48 kHz mic into 44.1 kHz out: after N output frames, the mic ring
