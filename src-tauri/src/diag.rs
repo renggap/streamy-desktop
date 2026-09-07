@@ -94,7 +94,7 @@ mod atomic_tests {
         // leftovers once writers finish (successful renames clean up).
         let dir = std::env::temp_dir().join(format!("streamy-atomic-race-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let p = std::path::PathBuf::from(dir.join("r.json"));
+        let p = dir.join("r.json");
         std::fs::write(&p, "init").unwrap();
         std::thread::scope(|sc| {
             for t in 0..8u32 {
