@@ -152,4 +152,33 @@ Gaps:
 
 ---
 
+## 6. End-to-end verification (real acceptance paths)
+
+Findings above came from code reading. The audit also exercised the real product paths where the environment allowed, and recorded honest blockers where it did not.
+
+**Real app launch (headless Linux):** ran the actual `target/debug/streamy-desktop` binary under `xvfb-run` for 25 s. App started, created app-data (`streamy.log`, `playlist.json`, `profiles.json`, `recordings/`), and the audio loop correctly retried every second with `ERROR: audio start failed: ALSA … No such file or directory` — no crash, no panic. This confirms finding §3.5-4 (1 Hz error-event spam on a device-less box) against real behavior. *Constraint: this server has no audio hardware (`/dev/snd` has no cards), so full play/mix/monitor on this machine is blocked; Windows is the product target.*
+
+**Live DNAS2 (Shoutcast) probe:** pointed the ignored live tests at the real server configured in this environment (`streamy1.radioislam.my.id:9000`). Result: the Ultravox 2.1 handshake reached real auth and the server answered `NAK:Stream In Use` — protocol implementation correct; SID 1 is occupied by another source (live broadcast), so the two full-stream live tests cannot run without kicking a live show. **Blocked externally; deliberately not retried.** Handshake-level pass: `probe_ultravox_handshake_live ... ok`.
+
+**Live Icecast acceptance path (full chain):** stood up real Icecast 2.4.4 (Docker, localhost) and ran the two `#[ignore]`d live integration tests, both **passed**:
+- `icy_live_connect_metadata` — real SOURCE handshake, 2 s of real LAME-encoded audio streamed, metadata update accepted.
+- `auto_detect_resolves_icecast_on_harbor` — Ultravox probe correctly rejected, auto-fallback resolved to Icecast, audio + direct metadata path exercised.
+
+Server-side confirmation from Icecast's own access log (not just client assertions):
+```
+"SOURCE /audit.mp3 HTTP/1.1" 200 19 "-" "Streamy/1.0"
+"GET /admin/metadata HTTP/1.1" 200 364 "-" "Streamy/1.0"
+```
+The server accepted both the audio stream and the metadata updates. This is the real integration boundary the product ships for.
+
+**Frontend production path:** `vite build` — 141 modules, 101 kB JS / 33 kB CSS, 0 errors. `svelte-check` 0/0. The UI acceptance path (Tauri WebView on Windows) can't render on this headless Linux box (WebKitGTK + no display beyond Xvfb smoke); noted as environmental, not product.
+
+**Supply chain (new findings, dev-only):** `npm audit` reports 2 dev-dependency vulnerabilities — `nanoid` (high: infinite loop on zero-size custom generators) and `postcss` (moderate: `sourceMappingURL` arbitrary `.map` read). Both are build-time only, not bundled into the shipped app (`nanoid`/`postcss` are transitive dev deps of Vite). `npm audit fix` is safe to run.
+
+**Rust lint:** `cargo clippy --all-targets` — 4 warnings, 0 errors (enum variant size mismatch ×2, needless borrow, module-name shadowing `engine::engine`). Cosmetic only.
+
+**Security observation from the live profile store:** real `profiles.json` on this box contains plaintext passwords (`plaintext_pw` visible). Expected on Linux (keyring absent → documented fallback), but it concretely demonstrates finding §3.7's accepted risk on any machine without a keyring.
+
+---
+
 *Audit performed by Jcode. All findings verified against source at commit `5edfb64`; test/typecheck outputs quoted above are from live runs on this machine.*
