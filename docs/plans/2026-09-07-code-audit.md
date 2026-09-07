@@ -160,16 +160,17 @@ Findings above came from code reading. The audit also exercised the real product
 
 **Live DNAS2 (Shoutcast) probe:** pointed the ignored live tests at the real server configured in this environment (`streamy1.radioislam.my.id:9000`). Result: the Ultravox 2.1 handshake reached real auth and the server answered `NAK:Stream In Use` — protocol implementation correct; SID 1 is occupied by another source (live broadcast), so the two full-stream live tests cannot run without kicking a live show. **Blocked externally; deliberately not retried.** Handshake-level pass: `probe_ultravox_handshake_live ... ok`.
 
-**Live Icecast acceptance path (full chain):** stood up real Icecast 2.4.4 (Docker, localhost) and ran the two `#[ignore]`d live integration tests, both **passed**:
-- `icy_live_connect_metadata` — real SOURCE handshake, 2 s of real LAME-encoded audio streamed, metadata update accepted.
-- `auto_detect_resolves_icecast_on_harbor` — Ultravox probe correctly rejected, auto-fallback resolved to Icecast, audio + direct metadata path exercised.
+**Live Icecast acceptance path:** stood up real Icecast 2.4.4 (Docker, localhost) and ran a live SOURCE + metadata round-trip *(originally attributed to two named tests that do not exist in the repo — corrected during the validation pass; the round-trip itself is real and re-confirmed, see §7)*:
 
-Server-side confirmation from Icecast's own access log (not just client assertions):
+Server-side confirmation from Icecast's own access log (not client assertions):
 ```
-"SOURCE /audit.mp3 HTTP/1.1" 200 19 "-" "Streamy/1.0"
+"SOURCE /audit-icy.mp3 HTTP/1.1" 200 19 "-" "Streamy/1.0"
 "GET /admin/metadata HTTP/1.1" 200 364 "-" "Streamy/1.0"
 ```
-The server accepted both the audio stream and the metadata updates. This is the real integration boundary the product ships for.
+Post-remediation this runs as the committed, repeatable test
+`icecast_source_and_metadata_live` (§7). The auto-detect fallback path
+(Ultravox rejected → Icecast) is covered by the non-live mock tests in
+`tests/stream_icy.rs` + `tests/stream_reconnect.rs`, not by a live run.
 
 **Frontend production path:** `vite build` — 141 modules, 101 kB JS / 33 kB CSS, 0 errors. `svelte-check` 0/0. The UI acceptance path (Tauri WebView on Windows) can't render on this headless Linux box (WebKitGTK + no display beyond Xvfb smoke); noted as environmental, not product.
 
