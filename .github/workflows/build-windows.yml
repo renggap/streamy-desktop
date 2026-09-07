@@ -32,6 +32,14 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
+      # The audit found 3 Windows-only defects invisible on Linux (rename
+      # ACCESS_DENIED, create ACCESS_DENIED, first-run false-WARN) — all
+      # proven reproducible only on Windows/Wine. Run the suite on real
+      # Windows before shipping a build.
+      - name: cargo test (Windows)
+        working-directory: src-tauri
+        run: cargo test --locked
+
       - name: Set build version (major.minor.<run_number>)
         shell: pwsh
         run: |
