@@ -73,9 +73,8 @@ impl ProfileStore {
     }
 
     fn write_all(&self, profiles: &[ConnectionProfile]) -> Result<(), String> {
-        fs::create_dir_all(&self.dir).map_err(|e| e.to_string())?;
         let s = serde_json::to_string_pretty(profiles).map_err(|e| e.to_string())?;
-        fs::write(self.path(), s).map_err(|e| e.to_string())
+        crate::diag::write_atomic(&self.path(), &s).map_err(|e| e.to_string())
     }
 
     /// Profiles for UI display — never includes plaintext passwords.

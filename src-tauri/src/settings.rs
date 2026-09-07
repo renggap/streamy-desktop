@@ -104,12 +104,9 @@ impl SettingsStore {
     }
 
     fn persist(&self, s: &Settings) -> Result<(), String> {
-        if let Some(dir) = self.path.parent() {
-            fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        }
-        fs::write(
+        crate::diag::write_atomic(
             &self.path,
-            serde_json::to_string_pretty(s).map_err(|e| e.to_string())?,
+            &serde_json::to_string_pretty(s).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())
     }

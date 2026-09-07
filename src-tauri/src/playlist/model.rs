@@ -29,6 +29,11 @@ impl Playlist {
         }
     }
     pub fn add(&mut self, t: Track) {
+        // Skip tracks already in the list (same file path). Drag-dropping a
+        // folder twice should not double the playlist.
+        if self.tracks.iter().any(|x| x.path == t.path) {
+            return;
+        }
         self.tracks.push(t);
     }
     pub fn next_index(&self, current: Option<usize>) -> Option<usize> {
@@ -41,10 +46,9 @@ impl Playlist {
     /// Persist tracks to <data_dir>/playlist.json so the playlist survives
     /// restarts. Best-effort: failures log and return Err for caller to log.
     pub fn save_to(&self, dir: &std::path::Path) -> Result<(), String> {
-        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        fs::write(
-            dir.join("playlist.json"),
-            serde_json::to_string_pretty(&self.tracks).map_err(|e| e.to_string())?,
+        crate::diag::write_atomic(
+            &dir.join("playlist.json"),
+            &serde_json::to_string_pretty(&self.tracks).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())
     }
@@ -117,6 +121,20 @@ mod tests {
         let p = Playlist::load_from(&dir);
         assert!(p.tracks.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_skips_duplicate_paths() {
+        let mut p = Playlist::new();
+        let t = || Track {
+            path: "/a.mp3".into(),
+            title: "a".into(),
+            artist: String::new(),
+            duration_secs: 1.0,
+        };
+        p.add(t());
+        p.add(t());
+        assert_eq!(p.tracks.len(), 1, "duplicate path must not double-add");
     }
 
     #[test]

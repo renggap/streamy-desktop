@@ -34,3 +34,18 @@ pub fn log_path() -> String {
         .map(|p| p.display().to_string())
         .unwrap_or_default()
 }
+
+/// Atomically replace `path` with `contents` (write temp + rename), so a
+/// crash mid-write never leaves settings.json/profiles.json/playlist.json
+/// truncated. Same-filesystem rename is atomic on Linux/macOS/Windows.
+pub fn write_atomic(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    let mut f = std::fs::File::create(&tmp)?;
+    f.write_all(contents.as_bytes())?;
+    f.sync_all()?;
+    std::fs::rename(&tmp, path)
+}
