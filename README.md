@@ -45,7 +45,8 @@ Rust only:
 
 ```bash
 cd src-tauri
-cargo test            # 90 unit tests (2 live-stream tests are #[ignore])
+cargo test            # 109 tests pass; 7 live-server tests stay #[ignore]d
+                      # behind env creds (see src-tauri/tests/stream_live.rs)
 cargo clippy
 ```
 
@@ -71,7 +72,9 @@ env vars) or add a profile in the UI pointing at `http://localhost:8200`.
 
 CI (`.github/workflows/build-windows.yml`) builds the Windows MSI/NSIS on
 every push and stamps `run_number` as the patch version. `test.yml` runs
-`cargo test --locked` + `svelte-check` on every push/PR.
+`cargo test --locked` + `cargo fmt --check` + `cargo clippy -D warnings`
++ `svelte-check` on every push/PR; `cargo test --locked` also runs on
+`windows-latest` before any installer is packaged.
 
 ```bash
 npm run tauri build
