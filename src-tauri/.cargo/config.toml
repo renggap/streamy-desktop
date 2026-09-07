@@ -1,0 +1,8 @@
+# Cross-compile support (cargo xwin build --target x86_64-pc-windows-msvc).
+# fdk-aac-sys 0.5.0's build script picks the C++ runtime with
+# cfg!(target_os = ...) — in a build script that's the HOST OS — so
+# cross-compiling from Linux wrongly emits `cargo:rustc-link-lib=stdc++`.
+# rustflags cannot undo a rustc-link-lib, so satisfy the linker instead:
+# stdc++.lib below is a copy of the MSVC C++ runtime import lib (msvcprt).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/LIBPATH:.cargo/win-libs"]
