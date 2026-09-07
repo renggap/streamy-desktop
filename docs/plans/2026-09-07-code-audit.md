@@ -318,6 +318,11 @@ fmt-clean — 29 files, whitespace-only): Linux `cargo test --locked`
 PATH for tauri-winres) — 14/14 exes, 109/109 tests; live Icecast
 re-run at HEAD: SOURCE /audit-icy.mp3 200 in server access.log.
 
+Release-profile validation (the profile CI actually ships): cross-built
+`--release` PE32+ (16.2 MB) boots under Wine, survives 15 s, logs only
+the expected `no output device` guard (first-run WARN fix confirmed
+present in the optimized build), exits clean.
+
 **Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
 hardening in ICY headers, encoder-rate-fallback matching (no user-visible
 defect on supported rates), repeat/shuffle + AAC-record + per-deck-EQ design
