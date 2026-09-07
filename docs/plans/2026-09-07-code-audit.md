@@ -282,11 +282,11 @@ cross-built PE32+ test binaries were actually **executed** under Wine 10
   under Wine), corrupting a clean 401 into "connection reset".
 
 Cross-platform matrix at this commit: Linux `cargo test` **104/0**
-(65 lib + 37 integration + 2 non-ignored live Icecast tests),
-clippy 0 warnings; Windows-under-Wine **lib 65/65 + integration 37/37**
-(the 2 live tests need a running Icecast and were not rerun under Wine).
-Still not covered: GUI rendering and real audio devices on Windows
-(no Windows machine here).
+(65 lib + 37 integration + 2 pure unit tests in stream_live.rs — DNAS
+stats parsing and a mock http_get; all actual live tests are #[ignore]d
+behind env vars), clippy 0 warnings; Windows-under-Wine **lib 65/65 +
+integration 37/37**. Still not covered: GUI rendering and real audio
+devices on Windows (no Windows machine here).
 
 **Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
 hardening in ICY headers, encoder-rate-fallback matching (no user-visible
