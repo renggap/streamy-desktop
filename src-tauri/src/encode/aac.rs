@@ -5,7 +5,9 @@
 // flush() drains the tail. Our Encoder trait wraps that behind the same
 // encode/flush shape as MP3.
 
-use fdk_aac::enc::{AudioObjectType, BitRate, ChannelMode, Encoder as FdkEncoder, EncoderParams, Transport};
+use fdk_aac::enc::{
+    AudioObjectType, BitRate, ChannelMode, Encoder as FdkEncoder, EncoderParams, Transport,
+};
 
 use super::Encoder;
 use crate::encode::EncoderConfig;
@@ -26,7 +28,10 @@ impl AacEncoder {
         };
         let enc = FdkEncoder::new(params).map_err(|e| format!("fdk-aac: {e:?}"))?;
         // 6144 bytes/channel/frame is the AAC max; stereo + ADTS header fits in 16KB.
-        Ok(Self { enc, out: vec![0u8; 16384] })
+        Ok(Self {
+            enc,
+            out: vec![0u8; 16384],
+        })
     }
 }
 

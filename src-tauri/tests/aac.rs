@@ -37,7 +37,9 @@ fn encode_sine_produces_adts_frames_and_expected_size() {
     out.extend_from_slice(&enc.flush().unwrap());
 
     // ADTS sync word: 12 one-bits -> 0xFF, 0xFx.
-    let sync = out.windows(2).position(|w| w[0] == 0xFF && (w[1] & 0xF0) == 0xF0);
+    let sync = out
+        .windows(2)
+        .position(|w| w[0] == 0xFF && (w[1] & 0xF0) == 0xF0);
     assert!(sync.is_some(), "no ADTS sync in {} bytes", out.len());
 
     // 128 kbps * 2s ≈ 32000 bytes (ADTS adds ~7B/frame overhead).

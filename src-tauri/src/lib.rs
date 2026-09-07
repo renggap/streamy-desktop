@@ -56,21 +56,17 @@ pub fn run() {
             commands::webview2_installed,
         ])
         .manage(engine::engine::AudioEngine::new())
-        .manage(std::sync::Mutex::new(
-            commands::BcastState::Idle,
-        ))
-        .manage(std::sync::Mutex::new(
-            commands::RecState::Idle,
-        ))
+        .manage(std::sync::Mutex::new(commands::BcastState::Idle))
+        .manage(std::sync::Mutex::new(commands::RecState::Idle))
         .setup(|app| {
             // Diagnostics log + devtools (debug only).
             let data_dir = app.path().app_data_dir()?;
             let _ = std::fs::create_dir_all(&data_dir);
             diag::init(data_dir.join("streamy.log"));
             // Playlist lives in the OS app-data dir so tracks survive restarts.
-            app.manage(std::sync::Mutex::new(
-                playlist::model::Playlist::load_from(&data_dir),
-            ));
+            app.manage(std::sync::Mutex::new(playlist::model::Playlist::load_from(
+                &data_dir,
+            )));
             #[cfg(debug_assertions)]
             {
                 use tauri::Manager;
@@ -87,11 +83,7 @@ pub fn run() {
             app.manage(settings::SettingsStore::new(data_dir.clone()));
 
             // Restore the last-used mic input device.
-            if let Some(name) = app
-                .state::<settings::SettingsStore>()
-                .get()
-                .input_device
-            {
+            if let Some(name) = app.state::<settings::SettingsStore>().get().input_device {
                 if let Err(e) = app
                     .state::<engine::engine::AudioEngine>()
                     .set_input_device(name.clone())
@@ -102,11 +94,7 @@ pub fn run() {
                 }
             }
             // Restore the last-used output device.
-            if let Some(name) = app
-                .state::<settings::SettingsStore>()
-                .get()
-                .output_device
-            {
+            if let Some(name) = app.state::<settings::SettingsStore>().get().output_device {
                 let _ = app
                     .state::<engine::engine::AudioEngine>()
                     .set_output_device(Some(name));

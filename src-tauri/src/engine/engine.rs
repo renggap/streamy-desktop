@@ -145,8 +145,8 @@ impl EngineState {
             let deck_frame = [a[0] * ga + b[0] * gb, a[1] * ga + b[1] * gb];
 
             // Mic auto-duck: track music RMS, ease the duck gain.
-            let inst = ((deck_frame[0] * deck_frame[0] + deck_frame[1] * deck_frame[1]) * 0.5)
-                .sqrt();
+            let inst =
+                ((deck_frame[0] * deck_frame[0] + deck_frame[1] * deck_frame[1]) * 0.5).sqrt();
             self.music_rms += DUCK_SMOOTH * (inst - self.music_rms);
             // Resample mic → output rate. mic_rate is published by the mic
             // thread (AtomicU32); step = mic_rate / out_rate. Linear interp
@@ -172,13 +172,16 @@ impl EngineState {
                 1.0
             };
             self.duck_gain += DUCK_SMOOTH * (target_duck - self.duck_gain);
-            let mic_out = [
-                mic_frame[0] * self.duck_gain,
-                mic_frame[1] * self.duck_gain,
-            ];
+            let mic_out = [mic_frame[0] * self.duck_gain, mic_frame[1] * self.duck_gain];
 
             let mon = mix_bus(
-                &[[deck_frame[0] * self.monitor_file_gain, deck_frame[1] * self.monitor_file_gain], mic_out],
+                &[
+                    [
+                        deck_frame[0] * self.monitor_file_gain,
+                        deck_frame[1] * self.monitor_file_gain,
+                    ],
+                    mic_out,
+                ],
                 &[sends.decks_monitor, sends.mic_monitor],
             );
             let bcast = mix_bus(
@@ -258,7 +261,13 @@ impl AudioEngine {
         let out_for_thread = output_device.clone();
         let sig_for_thread = sig_tx.clone();
         thread::spawn(move || {
-            audio_loop(state_for_thread, app_for_thread, out_for_thread, sig_for_thread, sig_rx)
+            audio_loop(
+                state_for_thread,
+                app_for_thread,
+                out_for_thread,
+                sig_for_thread,
+                sig_rx,
+            )
         });
 
         Self {
@@ -279,7 +288,8 @@ impl AudioEngine {
 
     fn push(&self, a: Action) -> Result<(), String> {
         let mut p = self.control.lock().map_err(|e| e.to_string())?;
-        p.push(a).map_err(|_| "audio control queue full".to_string())
+        p.push(a)
+            .map_err(|_| "audio control queue full".to_string())
     }
     pub fn load(&self, path: String) -> Result<(), String> {
         self.push(Action::Load(path))
@@ -432,9 +442,7 @@ fn pick_output_device(wanted: &Option<String>) -> Option<cpal::Device> {
 }
 
 fn current_output_cfg(wanted: &Option<String>) -> StreamConfig {
-    match pick_output_device(wanted)
-        .and_then(|d| d.default_output_config().ok())
-    {
+    match pick_output_device(wanted).and_then(|d| d.default_output_config().ok()) {
         Some(c) => StreamConfig::from(c),
         None => StreamConfig {
             channels: 2,
@@ -475,8 +483,7 @@ fn build_output_stream(
     cfg: &StreamConfig,
     wanted: &Option<String>,
 ) -> Result<Stream, String> {
-    let device = pick_output_device(wanted)
-        .ok_or_else(|| "no output device".to_string())?;
+    let device = pick_output_device(wanted).ok_or_else(|| "no output device".to_string())?;
     let channels = cfg.channels as usize;
     let device_rate = cfg.sample_rate.0;
 
@@ -493,7 +500,11 @@ fn build_output_stream(
                             // the crossfader to it — A/B alternation on track change.
                             Action::Load(p) => {
                                 let target = 1 - s.active;
-                                let deck = if target == 0 { &mut s.deck_a } else { &mut s.deck_b };
+                                let deck = if target == 0 {
+                                    &mut s.deck_a
+                                } else {
+                                    &mut s.deck_b
+                                };
                                 match deck.open(&p, device_rate) {
                                     Ok(()) => {
                                         deck.playing = true;
@@ -522,7 +533,9 @@ fn build_output_stream(
                                 s.duck_depth_db = db;
                             }
                             Action::SetVolume(v) => s.volume = v.clamp(0.0, 2.0),
-                            Action::SetMonitorFileGain(v) => s.monitor_file_gain = v.clamp(0.0, 2.0),
+                            Action::SetMonitorFileGain(v) => {
+                                s.monitor_file_gain = v.clamp(0.0, 2.0)
+                            }
                         }
                     }
                     // 2. Render the output buffer: per-frame DSP loop.
@@ -575,8 +588,7 @@ mod tests {
         concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/tone-60s.mp3")
     }
 
-    fn state_with_rings()
-    -> (
+    fn state_with_rings() -> (
         EngineState,
         crate::engine::ring::StereoRingConsumer,
         crate::engine::ring::StereoRingConsumer,
@@ -618,12 +630,6 @@ mod tests {
         s.record_tx = Some(rtx);
         (s, brx, rrx)
     }
-
-
-
-
-
-
 
     #[test]
     fn mic_resampler_upsample_ratio_drains_slower() {
@@ -794,6 +800,9 @@ mod tests {
             (bmax * 0.4..=bmax * 0.6).contains(&out_max),
             "monitor should be roughly half of broadcast: out_max={out_max}, bmax={bmax}"
         );
-        assert!(bmax > 0.5, "broadcast must carry significant signal, bmax={bmax}");
+        assert!(
+            bmax > 0.5,
+            "broadcast must carry significant signal, bmax={bmax}"
+        );
     }
 }

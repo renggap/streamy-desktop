@@ -14,9 +14,25 @@ fn build_lame() {
     let src = lame.join("libmp3lame");
 
     let files = [
-        "bitstream", "encoder", "fft", "gain_analysis", "id3tag", "lame",
-        "newmdct", "presets", "psymodel", "quantize_pvt", "quantize", "reservoir",
-        "set_get", "tables", "takehiro", "util", "vbrquantize", "VbrTag", "version",
+        "bitstream",
+        "encoder",
+        "fft",
+        "gain_analysis",
+        "id3tag",
+        "lame",
+        "newmdct",
+        "presets",
+        "psymodel",
+        "quantize_pvt",
+        "quantize",
+        "reservoir",
+        "set_get",
+        "tables",
+        "takehiro",
+        "util",
+        "vbrquantize",
+        "VbrTag",
+        "version",
     ];
 
     let mut cc = cc::Build::new();

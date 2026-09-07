@@ -23,8 +23,8 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::diag;
-use crate::engine::ring::StereoRingConsumer;
 use crate::encode::{self, EncoderConfig};
+use crate::engine::ring::StereoRingConsumer;
 use crate::events::{self, StreamStats};
 use crate::stream::icy::IcySourceConfig;
 use crate::stream::ultravox::{self, UltravoxConfig};
@@ -116,7 +116,16 @@ pub async fn start(
     enc_cfg: EncoderConfig,
     app: Option<AppHandle>,
 ) -> Result<BroadcastHandle, String> {
-    start_with_opts(rx, cfg, enc_cfg, app, BACKOFF_BASE, BACKOFF_MAX, HANDSHAKE_TIMEOUT_SECS).await
+    start_with_opts(
+        rx,
+        cfg,
+        enc_cfg,
+        app,
+        BACKOFF_BASE,
+        BACKOFF_MAX,
+        HANDSHAKE_TIMEOUT_SECS,
+    )
+    .await
 }
 
 /// As `start` but with explicit backoff/timeout — used by tests to keep the
@@ -279,7 +288,12 @@ pub async fn start_with_opts(
         }
     });
 
-    Ok(BroadcastHandle { stop, streamer, metadata_tx, icecast_admin })
+    Ok(BroadcastHandle {
+        stop,
+        streamer,
+        metadata_tx,
+        icecast_admin,
+    })
 }
 
 /// Stream until the socket errors (returns `true` → caller reconnects) or stop is
@@ -360,12 +374,12 @@ async fn wait_for_stop(stop: &Arc<AtomicBool>) {
 
 /// Run the Ultravox handshake with a timeout cap.
 async fn connect_ultravox(c: &UltravoxConfig, timeout_secs: u64) -> Result<Source, String> {
-    let s = match tokio::time::timeout(Duration::from_secs(timeout_secs), ultravox::connect(c)).await
-    {
-        Ok(Ok(s)) => s,
-        Ok(Err(e)) => return Err(e),
-        Err(_) => return Err(format!("connect timed out after {timeout_secs}s")),
-    };
+    let s =
+        match tokio::time::timeout(Duration::from_secs(timeout_secs), ultravox::connect(c)).await {
+            Ok(Ok(s)) => s,
+            Ok(Err(e)) => return Err(e),
+            Err(_) => return Err(format!("connect timed out after {timeout_secs}s")),
+        };
     Ok(Source::Ultravox(s))
 }
 

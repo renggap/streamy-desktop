@@ -1,5 +1,5 @@
-use streamy_desktop::profile::store::{ConnectionProfile, ProfileStore};
 use std::fs;
+use streamy_desktop::profile::store::{ConnectionProfile, ProfileStore};
 
 fn tmp_store(tag: &str) -> (ProfileStore, std::path::PathBuf) {
     let dir = std::env::temp_dir().join(format!(
@@ -130,7 +130,9 @@ fn keyring_path_used_when_enabled() {
     ));
     let _ = std::fs::remove_dir_all(&dir);
     let store = ProfileStore::new_with_keyring(dir.clone());
-    store.save(sample("kr"), Some("sekrit".to_string())).unwrap();
+    store
+        .save(sample("kr"), Some("sekrit".to_string()))
+        .unwrap();
 
     // Inspect profiles.json on disk via JSON parse — avoids false positives
     // from substring matching on other keys.
@@ -146,10 +148,7 @@ fn keyring_path_used_when_enabled() {
         assert_eq!(store.get_password("kr").unwrap(), "sekrit");
     } else {
         // Keyring unavailable (e.g. headless CI); plaintext fallback in JSON.
-        assert_eq!(
-            json[0]["plaintext_pw"].as_str().unwrap(),
-            "sekrit"
-        );
+        assert_eq!(json[0]["plaintext_pw"].as_str().unwrap(), "sekrit");
         assert_eq!(store.get_password("kr").unwrap(), "sekrit");
     }
 
@@ -164,7 +163,9 @@ fn delete_cleans_keyring_best_effort() {
     ));
     let _ = std::fs::remove_dir_all(&dir);
     let store = ProfileStore::new_with_keyring(dir.clone());
-    store.save(sample("kr"), Some("sekrit".to_string())).unwrap();
+    store
+        .save(sample("kr"), Some("sekrit".to_string()))
+        .unwrap();
     assert_eq!(store.list().len(), 1);
 
     // Delete must remove the profile from the JSON file even if keyring

@@ -2,12 +2,7 @@
 ///
 /// ponytail: linear interp is fine for P0 monitoring; P1 swaps in rubato
 /// (band-limited) per the design for broadcast quality.
-pub fn resample_linear(
-    input: &[f32],
-    channels: usize,
-    in_rate: u32,
-    out_rate: u32,
-) -> Vec<f32> {
+pub fn resample_linear(input: &[f32], channels: usize, in_rate: u32, out_rate: u32) -> Vec<f32> {
     if input.is_empty() || channels == 0 {
         return Vec::new();
     }

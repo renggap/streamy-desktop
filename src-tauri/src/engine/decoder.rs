@@ -1,10 +1,10 @@
+use std::fs::File;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::{CodecParameters, DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::formats::{FormatOptions, FormatReader};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
-use std::fs::File;
 
 /// A freshly-opened symphonia decoder ready to stream.
 pub struct Opened {
@@ -27,7 +27,12 @@ fn probe(path: &str) -> Result<(Box<dyn FormatReader>, CodecParameters), String>
         hint.with_extension(ext);
     }
     let probed = symphonia::default::get_probe()
-        .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
         .map_err(|e| e.to_string())?;
     let format = probed.format;
     let params = format

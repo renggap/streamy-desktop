@@ -45,7 +45,10 @@ async fn handshake_sends_icy_headers_and_streams_payload_intact() {
     drop(client);
 
     let (req, got) = srv.await.unwrap();
-    assert!(req.starts_with("SOURCE /test HTTP/1.1"), "bad request line: {req}");
+    assert!(
+        req.starts_with("SOURCE /test HTTP/1.1"),
+        "bad request line: {req}"
+    );
     assert!(req.contains("Content-Type: audio/mpeg"));
     assert!(req.contains("Authorization: Basic dXNlcjpwYXNz")); // base64("user:pass")
     assert!(req.contains("ice-name: Streamy"));
@@ -64,7 +67,9 @@ async fn handshake_reports_rejection() {
         let (mut sock, _) = listener.accept().await.unwrap();
         let mut buf = [0u8; 256];
         let _ = sock.read(&mut buf).await;
-        sock.write_all(b"HTTP/1.0 401 Unauthorized\r\n\r\n").await.unwrap();
+        sock.write_all(b"HTTP/1.0 401 Unauthorized\r\n\r\n")
+            .await
+            .unwrap();
         // Give the client time to read the response before the drop; an
         // immediate close can RST unread data on some stacks (seen under
         // Wine), turning a clean 401 into "connection reset".

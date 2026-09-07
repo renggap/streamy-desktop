@@ -1,6 +1,6 @@
-pub mod mp3;
 #[cfg(feature = "aac")]
 pub mod aac;
+pub mod mp3;
 
 pub use mp3::{bitrate_from_kbps, encode, EncoderConfig, Mp3Encoder};
 
@@ -43,6 +43,8 @@ pub fn build(cfg: &EncoderConfig) -> Result<Box<dyn Encoder>, String> {
         #[cfg(feature = "aac")]
         Codec::Aac => Ok(Box::new(aac::AacEncoder::new(cfg)?)),
         #[cfg(not(feature = "aac"))]
-        Codec::Aac => Err("AAC encoder not built (enable the 'aac' cargo feature + fdk-aac)".into()),
+        Codec::Aac => {
+            Err("AAC encoder not built (enable the 'aac' cargo feature + fdk-aac)".into())
+        }
     }
 }

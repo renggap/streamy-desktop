@@ -160,7 +160,8 @@ fn run_wav<W: Write + Seek>(
             Err(e)
         }
         None => {
-            out.seek(std::io::SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+            out.seek(std::io::SeekFrom::Start(0))
+                .map_err(|e| e.to_string())?;
             out.write_all(&wav_header(written as u32, sample_rate, 2))
                 .map_err(|e| e.to_string())?;
             out.flush().map_err(|e| e.to_string())?;

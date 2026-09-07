@@ -149,5 +149,4 @@ mod atomic_tests {
         assert!(leftovers.is_empty(), "tmp files leaked: {leftovers:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
-
 }

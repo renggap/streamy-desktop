@@ -6,7 +6,7 @@ fn encode_sine_produces_mp3_frames_and_expected_size() {
     let n = sr as usize; // 1 second of frames
     let mut samples = Vec::with_capacity(n * 2);
     for i in 0..n {
-        let v = 0.9 * (2.0 * std::f32::consts::PI * 440.0 * (i as f32) / sr as f32).sin() ;
+        let v = 0.9 * (2.0 * std::f32::consts::PI * 440.0 * (i as f32) / sr as f32).sin();
         samples.push(v);
         samples.push(v); // stereo interleaved
     }
@@ -38,11 +38,14 @@ fn encode_sine_produces_mp3_frames_and_expected_size() {
 
 #[test]
 fn unsupported_bitrate_errors() {
-    assert!(encode(&[0.0; 4], &EncoderConfig {
-        sample_rate: 44100,
-        channels: 2,
-        bitrate_kbps: 123,
-        codec: Codec::Mp3,
-    })
+    assert!(encode(
+        &[0.0; 4],
+        &EncoderConfig {
+            sample_rate: 44100,
+            channels: 2,
+            bitrate_kbps: 123,
+            codec: Codec::Mp3,
+        }
+    )
     .is_err());
 }

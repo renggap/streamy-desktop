@@ -246,7 +246,8 @@ mod tests {
         use std::io::Write;
         let data_len = (dur_frames * 2) as u32; // 16-bit mono
         let riff_len = 36 + data_len;
-        let path = std::env::temp_dir().join(format!("streamy-mono-test-{}.wav", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("streamy-mono-test-{}.wav", std::process::id()));
         let mut f = std::fs::File::create(&path).unwrap();
         // RIFF header
         f.write_all(b"RIFF").unwrap();
@@ -261,7 +262,7 @@ mod tests {
         f.write_all(&(sample_rate * 2).to_le_bytes()).unwrap(); // byte rate
         f.write_all(&2u16.to_le_bytes()).unwrap(); // block align
         f.write_all(&16u16.to_le_bytes()).unwrap(); // bits per sample
-        // data chunk
+                                                    // data chunk
         f.write_all(b"data").unwrap();
         f.write_all(&data_len.to_le_bytes()).unwrap();
         for i in 0..dur_frames {
@@ -292,7 +293,10 @@ mod tests {
         for _ in 0..play_frames {
             let frame = d.next_frame();
             // Mono deck produces stereo output (L==R).
-            assert!((frame[0] - frame[1]).abs() < 0.001, "mono deck must output L==R");
+            assert!(
+                (frame[0] - frame[1]).abs() < 0.001,
+                "mono deck must output L==R"
+            );
             let cur = d.pcm.len();
             if cur < prev_len {
                 trim_count += 1;
@@ -313,17 +317,18 @@ mod tests {
             let [l, _] = d.next_frame();
             max = max.max(l.abs());
         }
-        assert!(max > 0.1, "mono signal lost after {} trims, max={max}", trim_count);
+        assert!(
+            max > 0.1,
+            "mono signal lost after {} trims, max={max}",
+            trim_count
+        );
 
         let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn pcm_buffer_stays_bounded_while_playing_long_track() {
-        let fixture = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/tone-60s.mp3"
-        );
+        let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/tone-60s.mp3");
         let mut d = Deck::new();
         d.open(fixture, 48000).unwrap();
         d.playing = true;

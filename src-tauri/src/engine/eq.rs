@@ -208,7 +208,10 @@ mod tests {
         let mut eq = Eq3Band::new(SR);
         eq.set_gains_db(12.0, 0.0, 0.0);
         assert!(db(eq.magnitude_at(60.0)) > 9.0, "bass not boosted");
-        assert!(db(eq.magnitude_at(5000.0)).abs() < 1.0, "treble moved by bass boost");
+        assert!(
+            db(eq.magnitude_at(5000.0)).abs() < 1.0,
+            "treble moved by bass boost"
+        );
     }
 
     #[test]
@@ -216,7 +219,10 @@ mod tests {
         let mut eq = Eq3Band::new(SR);
         eq.set_gains_db(0.0, 0.0, 12.0);
         assert!(db(eq.magnitude_at(12000.0)) > 9.0, "treble not boosted");
-        assert!(db(eq.magnitude_at(60.0)).abs() < 1.0, "bass moved by treble boost");
+        assert!(
+            db(eq.magnitude_at(60.0)).abs() < 1.0,
+            "bass moved by treble boost"
+        );
     }
 
     #[test]

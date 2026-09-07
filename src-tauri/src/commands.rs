@@ -10,10 +10,10 @@ use lofty::tag::Accessor;
 use rayon::prelude::*;
 
 use crate::diag;
+use crate::encode::{Codec, EncoderConfig};
 use crate::engine::device;
 use crate::engine::engine::AudioEngine;
 use crate::engine::mixer::SourceMode;
-use crate::encode::{Codec, EncoderConfig};
 use crate::events;
 use crate::playlist::model::{Playlist, Track};
 use crate::profile::store::{ConnectionProfile, ProfileStore};
@@ -199,12 +199,22 @@ pub fn set_crossfade(pos: f32, engine: State<'_, AudioEngine>) -> Result<(), Str
 }
 
 #[tauri::command]
-pub fn set_eq(low_db: f64, mid_db: f64, high_db: f64, engine: State<'_, AudioEngine>) -> Result<(), String> {
+pub fn set_eq(
+    low_db: f64,
+    mid_db: f64,
+    high_db: f64,
+    engine: State<'_, AudioEngine>,
+) -> Result<(), String> {
     engine.set_eq(low_db, mid_db, high_db)
 }
 
 #[tauri::command]
-pub fn set_duck(enabled: bool, threshold: f32, depth_db: f32, engine: State<'_, AudioEngine>) -> Result<(), String> {
+pub fn set_duck(
+    enabled: bool,
+    threshold: f32,
+    depth_db: f32,
+    engine: State<'_, AudioEngine>,
+) -> Result<(), String> {
     engine.set_duck(enabled, threshold, depth_db)
 }
 
@@ -330,13 +340,16 @@ pub async fn connect_stream(
         }
         *g = BcastState::Connecting;
     }
-    diag::log(format!("connect_stream -> '{name}' @ {bitrate_kbps} kbps {codec:?}"));
+    diag::log(format!(
+        "connect_stream -> '{name}' @ {bitrate_kbps} kbps {codec:?}"
+    ));
     if !engine.has_output_device() {
         let mut g = bcast.lock().map_err(|e| e.to_string())?;
         *g = BcastState::Idle;
         return Err("no output audio device: plug in / select a speaker before going live".into());
     }
-    let result = connect_stream_inner(&name, bitrate_kbps, codec, &engine, &profiles, &bcast, &app).await;
+    let result =
+        connect_stream_inner(&name, bitrate_kbps, codec, &engine, &profiles, &bcast, &app).await;
     if result.is_err() {
         // Roll Connecting back unless a disconnect already set Idle (it then
         // owns the cleanup).
@@ -578,7 +591,11 @@ pub async fn start_recording(
     // Prefer the user-chosen recording folder; fall back to <app-data>/recordings.
     let rec_dir = match settings.get().recording_dir {
         Some(d) => std::path::PathBuf::from(d),
-        None => app.path().app_data_dir().map_err(|e| e.to_string())?.join("recordings"),
+        None => app
+            .path()
+            .app_data_dir()
+            .map_err(|e| e.to_string())?
+            .join("recordings"),
     };
     std::fs::create_dir_all(&rec_dir).map_err(|e| e.to_string())?;
     let stamp = std::time::SystemTime::now()
@@ -688,10 +705,7 @@ pub async fn stop_recording(
     // lock while joining.
     match slot.handle.stop() {
         Ok(()) => {
-            let _ = app.emit(
-                events::RECORDING_STATUS,
-                RecordingStatus::Stopped { path },
-            );
+            let _ = app.emit(events::RECORDING_STATUS, RecordingStatus::Stopped { path });
             Ok(())
         }
         Err(e) => {
@@ -737,7 +751,9 @@ fn is_webview2_installed() -> bool {
         format!("HKCU\\Software\\Microsoft\\EdgeUpdate\\Clients\\{CID}"),
     ];
     for key in keys {
-        let out = Command::new("reg").args(["query", &key, "/v", "pv"]).output();
+        let out = Command::new("reg")
+            .args(["query", &key, "/v", "pv"])
+            .output();
         if let Ok(out) = out {
             if !out.status.success() {
                 continue;
@@ -776,10 +792,7 @@ pub async fn repair_webview2(app: AppHandle) -> Result<String, String> {
     {
         buf.extend_from_slice(&chunk);
         downloaded += chunk.len() as u64;
-        let _ = app.emit(
-            events::WEBVIEW2_PROGRESS,
-            Wv2Progress { downloaded, total },
-        );
+        let _ = app.emit(events::WEBVIEW2_PROGRESS, Wv2Progress { downloaded, total });
     }
 
     // Integrity check: bail early if the response is not a PE executable.

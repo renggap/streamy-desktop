@@ -26,8 +26,8 @@ pub struct IcySourceConfig {
     pub icy_genre: String,
     pub icy_url: String,
     pub icy_pub: bool,
-    pub icy_br: u32,        // kbps
-    pub sample_rate: u32,   // for the ice-audio-info header
+    pub icy_br: u32,      // kbps
+    pub sample_rate: u32, // for the ice-audio-info header
 }
 
 /// Connect + run the Icecast HTTP source handshake. On success the owned
@@ -37,14 +37,20 @@ pub async fn connect(cfg: &IcySourceConfig) -> Result<TcpStream, String> {
         .await
         .map_err(|e| e.to_string())?;
     let req = source_request(cfg);
-    stream.write_all(req.as_bytes()).await.map_err(|e| e.to_string())?;
+    stream
+        .write_all(req.as_bytes())
+        .await
+        .map_err(|e| e.to_string())?;
 
     let head = read_http_head(&mut stream).await?;
     match status_code(&head).unwrap_or(0) {
         200 => Ok(stream),
         401 => Err("authentication failed (bad source user/password)".into()),
         403 => Err("mountpoint in use or forbidden".into()),
-        c => Err(format!("ICY source rejected: HTTP {c} ({})", first_line(&head))),
+        c => Err(format!(
+            "ICY source rejected: HTTP {c} ({})",
+            first_line(&head)
+        )),
     }
 }
 
@@ -73,7 +79,10 @@ pub async fn send_metadata(cfg: &IcySourceConfig, title: &str) -> Result<(), Str
         let mut stream = TcpStream::connect((cfg.host.as_str(), cfg.port))
             .await
             .map_err(|e| e.to_string())?;
-        stream.write_all(req.as_bytes()).await.map_err(|e| e.to_string())?;
+        stream
+            .write_all(req.as_bytes())
+            .await
+            .map_err(|e| e.to_string())?;
         let head = read_http_head(&mut stream).await?;
         match status_code(&head).unwrap_or(0) {
             200 => Ok(()),
@@ -173,8 +182,7 @@ fn url_encode(s: &str) -> String {
 
 /// Minimal RFC 4648 base64 encoder (no new dep needed).
 pub fn base64_encode(input: &[u8]) -> String {
-    const TBL: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const TBL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
     for chunk in input.chunks(3) {
         let b0 = chunk[0];
@@ -253,10 +261,15 @@ mod tests {
         let r = source_request(&cfg);
         // Request line + required headers.
         assert!(r.starts_with("SOURCE /stream HTTP/1.1\r\n"));
-        assert!(r.contains("Authorization: Basic ZGo6cHc=\r\n"), "basic auth header");
+        assert!(
+            r.contains("Authorization: Basic ZGo6cHc=\r\n"),
+            "basic auth header"
+        );
         assert!(r.contains("Content-Type: audio/mpeg\r\n"));
         assert!(r.contains("ice-public: 1\r\n"));
-        assert!(r.contains("ice-audio-info: ice-samplerate=44100;ice-bitrate=128;ice-channels=2\r\n"));
+        assert!(
+            r.contains("ice-audio-info: ice-samplerate=44100;ice-bitrate=128;ice-channels=2\r\n")
+        );
         assert!(r.ends_with("\r\n\r\n"));
     }
 

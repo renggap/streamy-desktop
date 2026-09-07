@@ -153,7 +153,10 @@ mod tests {
         // Simulates a pre-feature settings.json (no monitor_file_volume key).
         let json = r#"{"volume":0.8}"#;
         let s: Settings = serde_json::from_str(json).expect("parse");
-        assert_eq!(s.monitor_file_volume, 1.0, "missing key must default to unity");
+        assert_eq!(
+            s.monitor_file_volume, 1.0,
+            "missing key must default to unity"
+        );
         assert_eq!(s.volume, 0.8);
     }
 }

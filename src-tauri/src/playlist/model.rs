@@ -155,7 +155,10 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(dir.join("playlist.json")).unwrap())
                 .expect("saved file is valid JSON");
         let obj = saved.as_array().unwrap()[0].as_object().unwrap();
-        assert!(!obj.contains_key("future"), "unknown field must be stripped");
+        assert!(
+            !obj.contains_key("future"),
+            "unknown field must be stripped"
+        );
         assert!(obj.contains_key("path") && obj.contains_key("title"));
         let _ = std::fs::remove_dir_all(&dir);
     }

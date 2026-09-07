@@ -93,7 +93,11 @@ impl ProfileStore {
 
     /// Save (or replace) a profile. `password`: `Some(pw)` sets it; `None` keeps
     /// the existing stored password (used when editing non-credential fields).
-    pub fn save(&self, mut profile: ConnectionProfile, password: Option<String>) -> Result<(), String> {
+    pub fn save(
+        &self,
+        mut profile: ConnectionProfile,
+        password: Option<String>,
+    ) -> Result<(), String> {
         match password {
             Some(pw) => {
                 let keyring_ok = if self.use_keyring {
@@ -153,8 +157,7 @@ impl ProfileStore {
             return Err("no such profile".into());
         }
         if self.use_keyring {
-            let _ = keyring::Entry::new(KEYRING_SERVICE, name)
-                .and_then(|e| e.delete_credential());
+            let _ = keyring::Entry::new(KEYRING_SERVICE, name).and_then(|e| e.delete_credential());
         }
         self.write_all(&all)
     }
@@ -195,7 +198,10 @@ mod tests {
     fn first_run_missing_profiles_lists_empty() {
         let d = tempdir();
         let store = ProfileStore::new_no_keyring(d.clone());
-        assert!(store.list().is_empty(), "no profiles.json yet => empty list");
+        assert!(
+            store.list().is_empty(),
+            "no profiles.json yet => empty list"
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 

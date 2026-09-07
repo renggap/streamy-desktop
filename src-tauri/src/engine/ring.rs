@@ -113,47 +113,47 @@ mod tests {
     }
 }
 
-    #[test]
-    fn mpmc_multiple_producers_order_is_fifo_per_slot() {
-        // Two producers interleave pushes (no consumer during the run, so
-        // capacity-many survive). Invariants: each producer's surviving
-        // frames stay in push order (strictly increasing ids), no frame is
-        // returned twice, and exactly capacity survive.
-        let (tx, rx) = StereoRing::new(256);
-        let t2 = tx.clone();
-        let h = std::thread::spawn(move || {
-            for i in 0..500 {
-                t2.push([-1.0, i as f32]);
-            }
-        });
+#[test]
+fn mpmc_multiple_producers_order_is_fifo_per_slot() {
+    // Two producers interleave pushes (no consumer during the run, so
+    // capacity-many survive). Invariants: each producer's surviving
+    // frames stay in push order (strictly increasing ids), no frame is
+    // returned twice, and exactly capacity survive.
+    let (tx, rx) = StereoRing::new(256);
+    let t2 = tx.clone();
+    let h = std::thread::spawn(move || {
         for i in 0..500 {
-            tx.push([1.0, i as f32]);
+            t2.push([-1.0, i as f32]);
         }
-        h.join().unwrap();
-        let mut last_pos: Option<i32> = None;
-        let mut last_neg: Option<i32> = None;
-        let mut count = 0usize;
-        while let Some(f) = rx.pop() {
-            count += 1;
-            let id = f[1] as i32;
-            if f[0] > 0.0 {
-                assert!(last_pos.map_or(true, |p| id > p), "pos producer reordered");
-                last_pos = Some(id);
-            } else {
-                assert!(last_neg.map_or(true, |p| id > p), "neg producer reordered");
-                last_neg = Some(id);
-            }
-        }
-        assert_eq!(count, 256, "exactly capacity frames survive");
+    });
+    for i in 0..500 {
+        tx.push([1.0, i as f32]);
     }
+    h.join().unwrap();
+    let mut last_pos: Option<i32> = None;
+    let mut last_neg: Option<i32> = None;
+    let mut count = 0usize;
+    while let Some(f) = rx.pop() {
+        count += 1;
+        let id = f[1] as i32;
+        if f[0] > 0.0 {
+            assert!(last_pos.map_or(true, |p| id > p), "pos producer reordered");
+            last_pos = Some(id);
+        } else {
+            assert!(last_neg.map_or(true, |p| id > p), "neg producer reordered");
+            last_neg = Some(id);
+        }
+    }
+    assert_eq!(count, 256, "exactly capacity frames survive");
+}
 
-    #[test]
-    fn zero_capacity_ring_still_accepts_and_yields() {
-        // new(0) clamps to 1: force_push evicts, pop returns the survivor.
-        let (tx, rx) = StereoRing::new(0);
-        tx.push([1.0, 1.0]);
-        tx.push([2.0, 2.0]);
-        let f = rx.pop().expect("one frame survives");
-        assert_eq!(f, [2.0, 2.0], "only newest survives in a 1-slot ring");
-        assert!(rx.is_empty());
-    }
+#[test]
+fn zero_capacity_ring_still_accepts_and_yields() {
+    // new(0) clamps to 1: force_push evicts, pop returns the survivor.
+    let (tx, rx) = StereoRing::new(0);
+    tx.push([1.0, 1.0]);
+    tx.push([2.0, 2.0]);
+    let f = rx.pop().expect("one frame survives");
+    assert_eq!(f, [2.0, 2.0], "only newest survives in a 1-slot ring");
+    assert!(rx.is_empty());
+}

@@ -79,10 +79,14 @@ pub async fn read_frame<R: AsyncRead + Unpin>(r: &mut R) -> Result<(u16, Vec<u8>
     let len = u16::from_be_bytes([hdr[4], hdr[5]]) as usize;
     let mut payload = vec![0u8; len];
     if len > 0 {
-        r.read_exact(&mut payload).await.map_err(|e| e.to_string())?;
+        r.read_exact(&mut payload)
+            .await
+            .map_err(|e| e.to_string())?;
     }
     let mut trailer = [0u8; 1];
-    r.read_exact(&mut trailer).await.map_err(|e| e.to_string())?;
+    r.read_exact(&mut trailer)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok((id, payload))
 }
 
@@ -243,11 +247,26 @@ mod tests {
     #[test]
     fn xtea_multiblock_vectors() {
         // Independent cross-language vectors (Python reference impl).
-        assert_eq!(xtea_encipher_hex(b"0123456789abcdef", b"key"), "f88e91fd16781ccc3c2179618d1f0e73");
-        assert_eq!(xtea_encipher_hex(b"0123456789abcdefghijklmn", b"secretkey"), "2c4b6945e9051931c98804142a064a27d2a7a1d6327c3ff0");
-        assert_eq!(xtea_encipher_hex("pässwörd".as_bytes(), b"1234"), "89393495b864a76553db9412d1b31799");
-        assert_eq!(xtea_encipher_hex(b"password", b"this-is-a-very-long-key-over-16-bytes"), "a6e178953174cb08");
-        assert_eq!(xtea_encipher_hex(b"liverelay1234", b""), "53b52f6722513f7d9a871496cc6a58a8");
+        assert_eq!(
+            xtea_encipher_hex(b"0123456789abcdef", b"key"),
+            "f88e91fd16781ccc3c2179618d1f0e73"
+        );
+        assert_eq!(
+            xtea_encipher_hex(b"0123456789abcdefghijklmn", b"secretkey"),
+            "2c4b6945e9051931c98804142a064a27d2a7a1d6327c3ff0"
+        );
+        assert_eq!(
+            xtea_encipher_hex("pässwörd".as_bytes(), b"1234"),
+            "89393495b864a76553db9412d1b31799"
+        );
+        assert_eq!(
+            xtea_encipher_hex(b"password", b"this-is-a-very-long-key-over-16-bytes"),
+            "a6e178953174cb08"
+        );
+        assert_eq!(
+            xtea_encipher_hex(b"liverelay1234", b""),
+            "53b52f6722513f7d9a871496cc6a58a8"
+        );
     }
 
     #[test]
@@ -267,7 +286,10 @@ mod tests {
     #[test]
     fn frame_round_trip() {
         let f = encode_frame(0x1009, b"2.1\0");
-        assert_eq!(f, vec![0x5A, 0x00, 0x10, 0x09, 0x00, 0x04, 0x32, 0x2E, 0x31, 0x00, 0x00]);
+        assert_eq!(
+            f,
+            vec![0x5A, 0x00, 0x10, 0x09, 0x00, 0x04, 0x32, 0x2E, 0x31, 0x00, 0x00]
+        );
     }
 
     #[test]

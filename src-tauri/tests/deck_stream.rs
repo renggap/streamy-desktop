@@ -3,7 +3,8 @@ use streamy_desktop::engine::deck::Deck;
 #[test]
 fn streams_mp3_and_produces_signal() {
     let mut d = Deck::new();
-    d.open("tests/fixtures/tone-2s-44100-stereo.mp3", 48000).unwrap();
+    d.open("tests/fixtures/tone-2s-44100-stereo.mp3", 48000)
+        .unwrap();
     d.playing = true;
     let mut max = 0.0f32;
     let mut frames = 0usize;
@@ -19,7 +20,8 @@ fn streams_mp3_and_produces_signal() {
 #[test]
 fn ends_when_exhausted() {
     let mut d = Deck::new();
-    d.open("tests/fixtures/tone-2s-44100-stereo.mp3", 48000).unwrap();
+    d.open("tests/fixtures/tone-2s-44100-stereo.mp3", 48000)
+        .unwrap();
     d.playing = true;
     // 2s @ 48000 out rate -> ~96000 output frames; pull well past that.
     for _ in 0..120_000 {

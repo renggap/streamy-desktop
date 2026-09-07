@@ -30,9 +30,8 @@ fn stats_field(stats: &str, field: &str) -> String {
 
 async fn http_get(host: &str, port: u16, path: &str) -> String {
     let mut s = tokio::net::TcpStream::connect((host, port)).await.unwrap();
-    let req = format!(
-        "GET {path} HTTP/1.0\r\nHost: {host}:{port}\r\nUser-Agent: streamy-probe\r\n\r\n"
-    );
+    let req =
+        format!("GET {path} HTTP/1.0\r\nHost: {host}:{port}\r\nUser-Agent: streamy-probe\r\n\r\n");
     s.write_all(req.as_bytes()).await.unwrap();
     let mut buf = Vec::new();
     s.read_to_end(&mut buf).await.unwrap();
@@ -85,7 +84,10 @@ async fn dnas_aac_dj_bitrate_probe() {
     }
     out.extend_from_slice(&enc.flush().unwrap());
     let actual_kbps = (out.len() as f64 * 8.0) / 1000.0 / 6.0;
-    println!("PROBE encoder: AAC {BITRATE_KBPS} kbps -> {} bytes/6s = {actual_kbps:.1} kbps actual", out.len());
+    println!(
+        "PROBE encoder: AAC {BITRATE_KBPS} kbps -> {} bytes/6s = {actual_kbps:.1} kbps actual",
+        out.len()
+    );
 
     // 3. Stream the AAC to the harbor, chunked + lightly paced.
     for chunk in out.chunks(4096) {
@@ -103,5 +105,12 @@ async fn dnas_aac_dj_bitrate_probe() {
     println!(
         "PROBE DNAS: configured={BITRATE_KBPS} kbps server_reported={reported} kbps samplerate={sr} content={content}"
     );
-    println!("PROBE VERDICT: {}", if reported == "24" { "MATCH (24)" } else { "MISMATCH (not 24)" });
+    println!(
+        "PROBE VERDICT: {}",
+        if reported == "24" {
+            "MATCH (24)"
+        } else {
+            "MISMATCH (not 24)"
+        }
+    );
 }

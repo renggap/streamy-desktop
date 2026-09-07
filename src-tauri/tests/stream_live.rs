@@ -56,10 +56,10 @@ fn one_second_tone_mp3() -> Vec<u8> {
 }
 
 async fn http_get(host: &str, port: u16, path: &str) -> String {
-    let mut s = TcpStream::connect((host, port)).await.expect("stats connect");
-    let req = format!(
-        "GET {path} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: streamy-probe\r\n\r\n"
-    );
+    let mut s = TcpStream::connect((host, port))
+        .await
+        .expect("stats connect");
+    let req = format!("GET {path} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: streamy-probe\r\n\r\n");
     s.write_all(req.as_bytes()).await.unwrap();
     let mut buf = Vec::new();
     s.read_to_end(&mut buf).await.unwrap();
