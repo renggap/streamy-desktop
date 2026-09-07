@@ -6,17 +6,21 @@ use std::sync::Arc;
 /// underrun policy — the audience skips forward (brief gap) rather than the
 /// producer freezing on a stalled consumer. rtrb is SPSC and cannot pop from
 /// its producer, hence this wrapper (crossbeam ArrayQueue + per-slot slots).
-pub struct StereoRing {
-    q: Arc<ArrayQueue<[f32; 2]>>,
-}
-
+///
+/// Handles are cheap `Arc` clones — both sides can be shared (e.g. the mic
+/// callback and the mic thread).
+#[derive(Clone)]
 pub struct StereoRingProducer {
     q: Arc<ArrayQueue<[f32; 2]>>,
 }
 
+#[derive(Clone)]
 pub struct StereoRingConsumer {
     q: Arc<ArrayQueue<[f32; 2]>>,
 }
+
+/// Constructor namespace: `StereoRing::new(cap) -> (producer, consumer)`.
+pub struct StereoRing;
 
 impl StereoRing {
     pub fn new(frames: usize) -> (StereoRingProducer, StereoRingConsumer) {
@@ -40,6 +44,11 @@ impl StereoRingProducer {
 impl StereoRingConsumer {
     pub fn pop(&self) -> Option<[f32; 2]> {
         self.q.pop()
+    }
+
+    /// Frames currently queued (diagnostics/tests).
+    pub fn len(&self) -> usize {
+        self.q.len()
     }
 }
 

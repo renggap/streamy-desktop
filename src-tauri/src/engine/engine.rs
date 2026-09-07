@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -86,7 +87,21 @@ struct EngineState {
     meter: Meter,
     source_mode: SourceMode,
     cons: rtrb::Consumer<Action>,
-    mic_cons: rtrb::Consumer<[f32; 2]>,
+    /// True once the audio loop opened an output stream (no-device guard).
+    has_output: bool,
+    mic_cons: crate::engine::ring::StereoRingConsumer,
+    /// Mic device sample rate, published by the mic thread (see `mic.rs`).
+    mic_rate: Arc<AtomicU32>,
+    /// Output device sample rate, set on stream (re)open in `start()`.
+    out_rate: Arc<AtomicU32>,
+    /// Fractional read position into the mic stream, advanced by
+    /// `mic_rate / output_rate` per output frame (linear-interp resample,
+    /// same approach as the decks). Fixes pitch/throughput corruption when
+    /// the mic device and output device run at different rates.
+    mic_pos: f64,
+    /// Cached mic frames for interpolation (last popped pair).
+    mic_prev: [f32; 2],
+    mic_next: [f32; 2],
     /// When broadcasting, the callback pushes the broadcast bus into this ring
     /// for the encoder thread to consume. Drop-oldest overflow (design §7):
     /// a slow uplink makes the audience skip forward, not freeze.
@@ -133,7 +148,24 @@ impl EngineState {
             let inst = ((deck_frame[0] * deck_frame[0] + deck_frame[1] * deck_frame[1]) * 0.5)
                 .sqrt();
             self.music_rms += DUCK_SMOOTH * (inst - self.music_rms);
-            let mic_frame = self.mic_cons.pop().unwrap_or([0.0, 0.0]);
+            // Resample mic → output rate. mic_rate is published by the mic
+            // thread (AtomicU32); step = mic_rate / out_rate. Linear interp
+            // between mic_prev and mic_next at fractional position mic_pos.
+            // ponytail: linear interp; switch to a real polyphase filter if
+            // announcer voices ever measure aliasy.
+            let step = self.mic_rate.load(Ordering::Relaxed) as f64
+                / self.out_rate.load(Ordering::Relaxed).max(1) as f64;
+            let t = self.mic_pos as f32;
+            let mic_frame = [
+                self.mic_prev[0] + (self.mic_next[0] - self.mic_prev[0]) * t,
+                self.mic_prev[1] + (self.mic_next[1] - self.mic_prev[1]) * t,
+            ];
+            self.mic_pos += step;
+            while self.mic_pos >= 1.0 {
+                self.mic_pos -= 1.0;
+                self.mic_prev = self.mic_next;
+                self.mic_next = self.mic_cons.pop().unwrap_or(self.mic_next);
+            }
             let target_duck = if self.duck_enabled {
                 duck_gain(self.music_rms, self.duck_threshold, self.duck_depth_db)
             } else {
@@ -183,9 +215,10 @@ pub struct AudioEngine {
 impl AudioEngine {
     pub fn new() -> Self {
         let (prod, cons) = rtrb::RingBuffer::<Action>::new(64);
-        let (mic_prod, mic_cons) = rtrb::RingBuffer::<[f32; 2]>::new(8192);
-        let mic_prod = Arc::new(Mutex::new(mic_prod));
-        let mic = MicInput::new(mic_prod);
+        let (mic_prod, mic_cons) = super::ring::StereoRing::new(8192);
+        let mic = MicInput::new(mic_prod.clone());
+        let mic_rate = mic.rate.clone();
+        let out_rate = Arc::new(AtomicU32::new(FALLBACK_RATE));
 
         let (sig_tx, sig_rx) = mpsc::channel::<Signal>();
         let app: Arc<Mutex<Option<AppHandle>>> = Arc::new(Mutex::new(None));
@@ -208,8 +241,14 @@ impl AudioEngine {
             monitor_file_gain: 1.0,
             meter: Meter::new(FALLBACK_RATE),
             source_mode: SourceMode::File,
+            has_output: false,
             cons,
             mic_cons,
+            mic_rate,
+            out_rate: out_rate.clone(),
+            mic_pos: 0.0,
+            mic_prev: [0.0, 0.0],
+            mic_next: [0.0, 0.0],
             broadcast_tx: None,
             record_tx: None,
         }));
@@ -309,6 +348,13 @@ impl AudioEngine {
     pub fn output_rate(&self) -> u32 {
         self.state.lock().meter.rate()
     }
+
+    /// True once the audio loop has actually opened an output stream.
+    /// Guards connect/record against starting on a host with no audio
+    /// device (the retry loop keeps trying; broadcast would encode silence).
+    pub fn has_output_device(&self) -> bool {
+        self.state.lock().has_output
+    }
 }
 
 impl Default for AudioEngine {
@@ -340,10 +386,12 @@ fn audio_loop(
             s.deck_a.set_device_rate(cfg.sample_rate.0);
             s.deck_b.set_device_rate(cfg.sample_rate.0);
             s.fade_step = 1.0 / (CROSSFADE_SECS * cfg.sample_rate.0 as f32);
+            s.out_rate.store(cfg.sample_rate.0, Ordering::Relaxed);
         }
         match build_output_stream(state.clone(), app.clone(), sig_tx.clone(), &cfg, &wanted) {
             Ok(stream) => {
                 let _ = stream.play();
+                state.lock().has_output = true;
                 // Hold the stream until a rebuild (device lost) or shutdown.
                 match sig_rx.recv() {
                     Ok(Signal::Rebuild) => continue, // drop stream, rebuild on new default
@@ -351,7 +399,19 @@ fn audio_loop(
                 }
             }
             Err(e) => {
-                emit_err(&app, format!("audio start failed: {e}"));
+                // ponytail: emit once per distinct message; a headless host
+                // retries every 1s forever and would spam the UI event bus.
+                thread_local! {
+                    static LAST: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+                }
+                let msg = format!("audio start failed: {e}");
+                LAST.with(|l| {
+                    let mut l = l.borrow_mut();
+                    if *l != msg {
+                        *l = msg.clone();
+                        emit_err(&app, msg);
+                    }
+                });
                 thread::sleep(Duration::from_secs(1)); // no device yet; retry
             }
         }
@@ -539,8 +599,14 @@ mod tests {
             monitor_file_gain: 1.0,
             meter: Meter::new(44100),
             source_mode: SourceMode::Both,
+            has_output: false,
             cons: rtrb::RingBuffer::new(8).1,
-            mic_cons: rtrb::RingBuffer::new(8).1,
+            mic_cons: crate::engine::ring::StereoRing::new(8).1,
+            mic_rate: Arc::new(AtomicU32::new(44_100)),
+            out_rate: Arc::new(AtomicU32::new(44_100)),
+            mic_pos: 0.0,
+            mic_prev: [0.0, 0.0],
+            mic_next: [0.0, 0.0],
             broadcast_tx: None,
             record_tx: None,
         };
@@ -554,8 +620,36 @@ mod tests {
     }
 
     #[test]
+    fn mic_resampler_consumes_at_output_rate() {
+        // 48 kHz mic into 44.1 kHz out: after N output frames, the mic ring
+        // should have drained ~N * 44100/48000 frames (not N — the pre-fix
+        // behavior consumed one mic frame per output frame, i.e. pitch-up +
+        // eventual starvation).
+        let (mut s, _brx, _rrx) = state_with_rings();
+        let (mtx, mr) = crate::engine::ring::StereoRing::new(65536);
+        for _ in 0..60_000 {
+            mtx.push([0.5, 0.5]);
+        }
+        s.mic_cons = mr;
+        s.mic_rate.store(48_000, Ordering::Relaxed);
+        s.out_rate.store(44_100, Ordering::Relaxed);
+        s.source_mode = SourceMode::Mic; // silence decks, hear only mic path
+        let n = 48_000usize;
+        let mut buf = vec![0.0f32; n * 2];
+        s.render_buffer(&mut buf, 2);
+        let drained = 60_000 - s.mic_cons.len();
+        // Consume mic_rate/out_rate mic frames per output frame (48k source
+        // into 44.1k output skips source samples; 1:1 would pitch it up).
+        let expect = (n as f64 * 48_000.0 / 44_100.0) as usize;
+        assert!(
+            (drained as isize - expect as isize).abs() <= 64,
+            "drained {drained}, expected ~{expect} (ratio consumed, not 1:1)"
+        );
+    }
+
+    #[test]
     fn render_pushes_tone_to_broadcast_and_record_rings() {
-        let (mut s, mut brx, mut rrx) = state_with_rings();
+        let (mut s, brx, rrx) = state_with_rings();
         let mut buf = vec![0.0f32; 8192];
         s.render_buffer(&mut buf, 2);
         let (mut bmax, mut rmax) = (0.0f32, 0.0f32);
@@ -571,11 +665,13 @@ mod tests {
 
     #[test]
     fn file_mode_mutes_mic_on_broadcast_but_keeps_monitor() {
-        let (mut s, mut brx, _rrx) = state_with_rings();
+        let (mut s, brx, _rrx) = state_with_rings();
         s.source_mode = SourceMode::File;
         // Put a loud frame in the mic ring.
-        let (mut mtx, mr) = rtrb::RingBuffer::<[f32; 2]>::new(8);
-        mtx.push([0.9, 0.9]).unwrap();
+        let (mtx, mr) = crate::engine::ring::StereoRing::new(8);
+        for _ in 0..8 {
+            mtx.push([0.9, 0.9]);
+        }
         s.mic_cons = mr;
         let mut buf = vec![0.0f32; 8192];
         s.render_buffer(&mut buf, 2);
@@ -594,7 +690,7 @@ mod tests {
 
     #[test]
     fn monitor_file_gain_scales_monitor_only() {
-        let (mut s, mut brx, _rrx) = state_with_rings();
+        let (mut s, brx, _rrx) = state_with_rings();
         // Both source modes send the deck to both buses at unity; file gain must
         // only affect the monitor (out buffer), not broadcast (ring).
         s.monitor_file_gain = 0.5;

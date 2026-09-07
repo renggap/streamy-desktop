@@ -330,6 +330,11 @@ pub async fn connect_stream(
         *g = BcastState::Connecting;
     }
     diag::log(format!("connect_stream -> '{name}' @ {bitrate_kbps} kbps {codec:?}"));
+    if !engine.has_output_device() {
+        let mut g = bcast.lock().map_err(|e| e.to_string())?;
+        *g = BcastState::Idle;
+        return Err("no output audio device: plug in / select a speaker before going live".into());
+    }
     let result = connect_stream_inner(&name, bitrate_kbps, codec, &engine, &profiles, &bcast, &app).await;
     if result.is_err() {
         // Roll Connecting back unless a disconnect already set Idle (it then
@@ -563,6 +568,11 @@ pub async fn start_recording(
             return Err("already recording".into());
         }
         *g = RecState::Starting;
+    }
+    if !engine.has_output_device() {
+        let mut g = rec.lock().map_err(|e| e.to_string())?;
+        *g = RecState::Idle;
+        return Err("no output audio device: plug in / select a speaker before recording".into());
     }
     // Prefer the user-chosen recording folder; fall back to <app-data>/recordings.
     let rec_dir = match settings.get().recording_dir {
