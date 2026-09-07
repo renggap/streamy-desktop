@@ -321,7 +321,15 @@ re-run at HEAD: SOURCE /audit-icy.mp3 200 in server access.log.
 Release-profile validation (the profile CI actually ships): cross-built
 `--release` PE32+ (16.2 MB) boots under Wine, survives 15 s, logs only
 the expected `no output device` guard (first-run WARN fix confirmed
-present in the optimized build), exits clean.
+present in the optimized build), exits clean. Release-profile stress
+also exposed two flake sources invisible in debug single-runs, both
+fixed in `6622cab`: (a) `write_atomic`'s fixed 10x10ms retry windows
+starve under sustained 8-thread contention → 5 s deadline + backoff;
+(b) test tempdir helpers reused fixed names whose `remove_dir_all`
+teardown raced parallel tests → pid+ThreadId+counter names, no
+teardown. Proof: release lib exe 0/100 consecutive runs under Wine
+(was ~1/10 mixed failures); full release matrix 14/14 exes,
+109/109 tests.
 
 **Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
 hardening in ICY headers, encoder-rate-fallback matching (no user-visible
