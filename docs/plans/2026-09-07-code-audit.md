@@ -263,7 +263,30 @@ links GNU `stdc++`; worked around by aliasing `msvcprt.lib` as
 `stdc++.lib` (`src-tauri/.cargo/`). The shipped Windows CI build
 (windows-latest, real MSVC) never hits this because host==target there.
 Still not covered: *running* the exe on Windows with real audio hardware.
-\n**Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
+\n
+**Windows binary execution under Wine (follow-up `53f30f2`):** the
+cross-built PE32+ test binaries were actually **executed** under Wine 10
+(win64), not just linked:
+
+- Integration test exes: **37/37 pass**. (Initial failures were absolute
+  POSIX `CARGO_MANIFEST_DIR` fixture paths, meaningless under Wine —
+  resolved by running from a directory with `tests/fixtures/` present.)
+- Lib test exe: **65/65 pass, stable across 3 consecutive runs**.
+- **Real Windows-only defect found + fixed:** `fs::rename` onto a
+  concurrently-open destination fails with `ACCESS_DENIED` on Windows
+  (no POSIX-style atomic replace). `write_atomic` now retries the rename
+  10×10 ms on `PermissionDenied` — this would have surfaced as spurious
+  `save_profile` errors on the shipping platform.
+- Test hardening: the `stream_icy` rejection mock now drains + delays
+  before close; immediate close RSTs unread data on some stacks (seen
+  under Wine), corrupting a clean 401 into "connection reset".
+
+Cross-platform matrix at this commit: Linux `cargo test` **104/0**,
+clippy 0 warnings; Windows-under-Wine lib **65/65** + integration
+**37/37**. Still not covered: GUI rendering and real audio devices on
+Windows (no Windows machine here).
+
+**Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
 hardening in ICY headers, encoder-rate-fallback matching (no user-visible
 defect on supported rates), repeat/shuffle + AAC-record + per-deck-EQ design
 drift. Each recorded in README "Notes / known limits" for the next pass.
