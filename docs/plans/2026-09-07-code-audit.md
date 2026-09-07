@@ -311,6 +311,13 @@ before the fix the lib exe failed ~1/9 runs; after, 0/40 targeted
 + 0/5 full-suite + 14/14 exes (109/109 tests) in the final matrix.
 (Linux unaffected: EACCES on create is not transient there.)
 
+Final HEAD verification (after `cargo fmt`, d3cc865, made the tree
+fmt-clean — 29 files, whitespace-only): Linux `cargo test --locked`
+109/0, clippy 0, svelte-check 0/0, vite build clean, `npm audit
+--omit dev` 0; Windows-under-Wine rebuilt from scratch (llvm-rc on
+PATH for tauri-winres) — 14/14 exes, 109/109 tests; live Icecast
+re-run at HEAD: SOURCE /audit-icy.mp3 200 in server access.log.
+
 **Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
 hardening in ICY headers, encoder-rate-fallback matching (no user-visible
 defect on supported rates), repeat/shuffle + AAC-record + per-deck-EQ design
