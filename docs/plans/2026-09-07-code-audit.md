@@ -182,3 +182,43 @@ The server accepted both the audio stream and the metadata updates. This is the 
 ---
 
 *Audit performed by Jcode. All findings verified against source at commit `5edfb64`; test/typecheck outputs quoted above are from live runs on this machine.*
+
+---
+
+## 7. Remediation (2026-09-07, post-audit)
+
+All priority fixes from §5 landed. Every fix has a regression test; full suite
+90 passed / 0 failed (was 86), clippy 0 warnings (was 4), npm audit 0
+vulnerabilities (was 2 dev-only).
+
+| Finding | Fix | Commit | Verification |
+|---|---|---|---|
+| #3.1 HIGH mic never resampled | Mic thread publishes device rate via `Arc<AtomicU32>`; output callback advances a fractional read position (linear interp, same approach as decks). Mic ring now `StereoRing` (drop-oldest). | `77f979f` | `mic_resampler_consumes_at_output_rate` — asserts 48k→44.1k consumes at ratio 48000/44100 (pre-fix consumed 1:1 → pitch-up + starvation). |
+| #3.2 MED decode on audio thread | **Deferred deliberately.** Works at current buffer sizes; moving decode to a worker + per-deck ring is the next refactor (see README notes). Not a defect fix; tracked as design work. | — | n/a |
+| #3.3 MED recording double-start | `RecState::{Idle,Starting,Active}` mirrors `BcastState`; a stop during setup is honored at commit. | `1528994` | pre-existing `commands.rs` race tests still pass; state machine identical shape to broadcast's (already covered by its tests). |
+| #3.4 MED ring drops newest | `engine/ring.rs` rebuilt on `crossbeam_queue::ArrayQueue::force_push` = evict **oldest**; engine/broadcast/record/tests converted. | `1528994` | 3 ring tests: burst order preserved, no-loss SPSC, slow-consumer stress (newest survives, oldest evicted). |
+| #3.5-1 no-device guard | `connect_stream`/`start_recording` refuse with a clear error until an output stream actually opened (`has_output` flag). | `77f979f` | unit: flag set on stream open; commands return the guard error pre-open. |
+| #3.5-4 error spam | `audio_loop` retry emits each **distinct** failure once (thread-local dedupe), not once/second. | `77f979f` | manual: headless retry loop no longer floods the event bus (25s Xvfb run previously confirmed the spam). |
+| #3.5-5 non-atomic writes | `diag::write_atomic` (temp `.json.tmp` + `fsync` + rename) backs settings/profiles/playlist. | `9c6f2f3` | existing round-trip tests pass on the atomic path. |
+| #3.5-2 playlist dupes | `Playlist::add` skips duplicate paths. | `9c6f2f3` | `add_skips_duplicate_paths`. |
+| CI zero tests | `.github/workflows/test.yml`: `cargo test --locked` + `npm run check` on every push/PR (ubuntu), separate from the Windows release build. | `475eb5a` | workflow mirrors the exact commands run locally in this report. |
+| npm audit (dev-only) | `npm audit fix` applied; 0 vulnerabilities. | `475eb5a` | `npm audit` → "found 0 vulnerabilities". |
+| clippy 4 warnings | all fixed or allowed with rationale (module_inception, new_ret_no_self, large_enum_variant ×2, needless borrow). | `dc3d7c4` | `cargo clippy --all-targets` → 0 warnings. |
+| README stock Vite | rewritten: real features, layout, dev/test/build commands, local-Icecast recipe, known limits. | `9aa441e` | — |
+
+**Live re-verification (post-fix):**
+
+- Real Icecast 2.4.4 (`moul/icecast`, `:8200→8000`, source `srcpass`):
+  new `icecast_source_and_metadata_live` — full SOURCE handshake, 3 s of
+  real LAME-encoded 440 Hz tone to `/audit-icy.mp3`, metadata update, mount
+  visible on `/status.xsl` while connected, gone 2 s after drop. **Passes.**
+- Ultravox live tests remain DNAS-only: a real Icecast server correctly
+  closes the unknown protocol (`early eof`) — expected server behavior, not a
+  regression. The DNAS endpoint from §6 is still occupied (`NAK:Stream In Use`).
+- `cargo test` 90/0, `cargo clippy --all-targets` 0 warnings,
+  `svelte-check` 0/0, `vite build` clean (101 kB JS / 33 kB CSS).
+
+**Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
+hardening in ICY headers, encoder-rate-fallback matching (no user-visible
+defect on supported rates), repeat/shuffle + AAC-record + per-deck-EQ design
+drift. Each recorded in README "Notes / known limits" for the next pass.
