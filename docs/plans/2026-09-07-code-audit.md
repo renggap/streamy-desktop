@@ -288,6 +288,20 @@ behind env vars), clippy 0 warnings; Windows-under-Wine **lib 65/65 +
 integration 37/37**. Still not covered: GUI rendering and real audio
 devices on Windows (no Windows machine here).
 
+Wine GUI smoke test (2026-09-08): the PE32+ exe launches under
+Wine 10 + Xvfb, survives 12 s, logs `[audio] audio start failed:
+no output device` (the audit fix firing correctly), and exits
+cleanly. The window itself cannot render: Tauri v2 needs the
+WebView2 COM API surface, which Wine does not implement (verified:
+no WebView2 in prefix, no window mapped, blank X root capture).
+Rendering validation therefore requires real Windows hardware.
+The same smoke run surfaced one cosmetic bug, now fixed: a
+**first run** (no settings.json yet) logged
+`settings.json corrupt or unreadable` — missing-file is now silent,
+only a genuine parse failure warns (same for profiles.json).
++5 regression tests (missing/corrupt/roundtrip); Linux 109/0,
+Windows-under-Wine lib 70/70.
+
 **Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
 hardening in ICY headers, encoder-rate-fallback matching (no user-visible
 defect on supported rates), repeat/shuffle + AAC-record + per-deck-EQ design

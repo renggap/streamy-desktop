@@ -48,13 +48,16 @@ pub struct SettingsStore {
 impl SettingsStore {
     pub fn new(dir: PathBuf) -> Self {
         let path = dir.join("settings.json");
-        let inner = fs::read_to_string(&path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_else(|| {
-                crate::diag::log("WARN: settings.json corrupt or unreadable; using defaults");
+        let inner = match fs::read_to_string(&path) {
+            Err(_) => Settings::default(), // first run
+            Ok(s) => serde_json::from_str(&s).unwrap_or_else(|e| {
+                crate::diag::log(format!(
+                    "WARN: settings.json corrupt ({}); using defaults",
+                    e
+                ));
                 Settings::default()
-            });
+            }),
+        };
         Self {
             path,
             inner: Mutex::new(inner),
@@ -115,6 +118,35 @@ impl SettingsStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tempdir() -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "streamy-settings-test-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn first_run_missing_settings_is_silent_and_defaults() {
+        let d = tempdir();
+        let s = SettingsStore::new(d.clone()).get();
+        assert_eq!(s.volume, 1.0, "first run must be unity volume, not silent");
+        assert!(s.input_device.is_none());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn corrupt_settings_json_still_loads_defaults() {
+        let d = tempdir();
+        std::fs::write(d.join("settings.json"), b"{ not json").unwrap();
+        let s = SettingsStore::new(d.clone()).get();
+        assert_eq!(s.volume, 1.0, "corrupt file must fall back to defaults");
+        let _ = std::fs::remove_dir_all(&d);
+    }
 
     #[test]
     fn old_settings_json_without_monitor_file_volume_loads_at_unity() {

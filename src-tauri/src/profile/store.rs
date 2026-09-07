@@ -63,13 +63,16 @@ impl ProfileStore {
     }
 
     fn read_all(&self) -> Vec<ConnectionProfile> {
-        fs::read_to_string(self.path())
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_else(|| {
-                crate::diag::log("WARN: profiles.json corrupt or unreadable; profile list empty");
+        match fs::read_to_string(self.path()) {
+            Err(_) => Vec::new(), // first run
+            Ok(s) => serde_json::from_str(&s).unwrap_or_else(|e| {
+                crate::diag::log(format!(
+                    "WARN: profiles.json corrupt ({}); profile list empty",
+                    e
+                ));
                 Vec::new()
-            })
+            }),
+        }
     }
 
     fn write_all(&self, profiles: &[ConnectionProfile]) -> Result<(), String> {
@@ -170,5 +173,67 @@ impl ProfileStore {
             .find(|p| p.name == name)
             .and_then(|p| p.plaintext_pw.clone())
             .ok_or_else(|| "no password for profile".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tempdir() -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "streamy-profiles-test-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn first_run_missing_profiles_lists_empty() {
+        let d = tempdir();
+        let store = ProfileStore::new_no_keyring(d.clone());
+        assert!(store.list().is_empty(), "no profiles.json yet => empty list");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn corrupt_profiles_json_lists_empty_not_panic() {
+        let d = tempdir();
+        std::fs::write(d.join("profiles.json"), b"~~~ not json ~~~").unwrap();
+        let store = ProfileStore::new_no_keyring(d.clone());
+        assert!(store.list().is_empty());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn save_then_list_roundtrips_without_password() {
+        let d = tempdir();
+        let store = ProfileStore::new_no_keyring(d.clone());
+        let p = ConnectionProfile {
+            name: "test".into(),
+            host: "example.com".into(),
+            port: 8000,
+            user: "source".into(),
+            mount: "/test.mp3".into(),
+            stream_id: 1,
+            station_name: "T".into(),
+            genre: "g".into(),
+            url: "u".into(),
+            public: false,
+            azuracast: false,
+            plaintext_pw: None,
+        };
+        store.save(p, Some("s3cret".into())).expect("save");
+        let listed = store.list();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].name, "test");
+        assert!(
+            listed[0].plaintext_pw.is_none(),
+            "list() must never include plaintext passwords"
+        );
+        let _ = std::fs::remove_dir_all(&d);
     }
 }
