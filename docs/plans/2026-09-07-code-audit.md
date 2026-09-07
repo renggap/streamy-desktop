@@ -251,7 +251,19 @@ Adversarial tests beyond the happy paths, plus one real defect they caught:
   (was 90), `npm ci` + `svelte-check` 0/0, `npm audit` 0 vulns,
   `cargo clippy --all-targets` 0 warnings.
 
-**Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
+
+**Windows-target cross-compile check (follow-up `ae37fbd`):** with
+`cargo xwin` + clang-cl + the xwin CRT/SDK, the codebase now cross-checks
+(`cargo xwin check --target x86_64-pc-windows-msvc`: 0 errors) and
+cross-links to a real **PE32+ executable** (default features, AAC on)
+from this Linux host. One upstream bug found on the way: `fdk-aac-sys`
+0.5.0's build script selects the C++ runtime with `cfg!(target_os=...)`,
+which inside a build script is the *host* OS, so Linux→Windows wrongly
+links GNU `stdc++`; worked around by aliasing `msvcprt.lib` as
+`stdc++.lib` (`src-tauri/.cargo/`). The shipped Windows CI build
+(windows-latest, real MSVC) never hits this because host==target there.
+Still not covered: *running* the exe on Windows with real audio hardware.
+\n**Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
 hardening in ICY headers, encoder-rate-fallback matching (no user-visible
 defect on supported rates), repeat/shuffle + AAC-record + per-deck-EQ design
 drift. Each recorded in README "Notes / known limits" for the next pass.
