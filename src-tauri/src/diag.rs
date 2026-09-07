@@ -50,7 +50,23 @@ pub fn write_atomic(path: &std::path::Path, contents: &str) -> std::io::Result<(
     let uniq = SEQ.fetch_add(1, Ordering::Relaxed) ^ std::process::id() as u64;
     let tmp = path.with_extension(format!("{uniq}.tmp"));
     let res = (|| {
-        let mut f = std::fs::File::create(&tmp)?;
+        // Windows: AV/indexer can briefly hold even a fresh tmp path,
+        // making create() fail with ACCESS_DENIED. Same retry class as
+        // the rename below.
+        let mut open_retries = 10u32;
+        let mut f = loop {
+            match std::fs::File::create(&tmp) {
+                Ok(f) => break f,
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    open_retries -= 1;
+                    if open_retries == 0 {
+                        return Err(e);
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(e) => return Err(e),
+            }
+        };
         f.write_all(contents.as_bytes())?;
         f.sync_all()?;
         // Windows has no atomic replace-while-dest-open: a concurrent writer

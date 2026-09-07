@@ -302,6 +302,15 @@ only a genuine parse failure warns (same for profiles.json).
 +5 regression tests (missing/corrupt/roundtrip); Linux 109/0,
 Windows-under-Wine lib 70/70.
 
+Repeat-run stability sweep of the Wine matrix caught a third real
+Windows-only defect: under load, `File::create` on a fresh tmp can
+return ACCESS_DENIED (antivirus/indexer briefly holds the path) —
+same class as the rename-retry bug. `write_atomic` now retries the
+open 10x10ms on PermissionDenied, exactly like the rename. Proof:
+before the fix the lib exe failed ~1/9 runs; after, 0/40 targeted
++ 0/5 full-suite + 14/14 exes (109/109 tests) in the final matrix.
+(Linux unaffected: EACCES on create is not transient there.)
+
 **Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
 hardening in ICY headers, encoder-rate-fallback matching (no user-visible
 defect on supported rates), repeat/shuffle + AAC-record + per-deck-EQ design
