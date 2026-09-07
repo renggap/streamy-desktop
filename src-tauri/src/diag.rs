@@ -50,16 +50,19 @@ pub fn write_atomic(path: &std::path::Path, contents: &str) -> std::io::Result<(
     let uniq = SEQ.fetch_add(1, Ordering::Relaxed) ^ std::process::id() as u64;
     let tmp = path.with_extension(format!("{uniq}.tmp"));
     let res = (|| {
-        // Windows: AV/indexer can briefly hold even a fresh tmp path,
-        // making create() fail with ACCESS_DENIED. Same retry class as
-        // the rename below.
-        let mut open_retries = 10u32;
+        // Windows: AV/indexer or a concurrent writer can briefly hold
+        // paths, making create()/rename() fail with ACCESS_DENIED /
+        // ERROR_SHARING_VIOLATION. Retry against a deadline — fixed
+        // attempt counts starve under multi-writer contention (proven
+        // by the 8x50 stress test failing ~1/10 under Wine).
+        // ponytail: 5 s deadline + 10 ms backoff; exponential backoff
+        // or ReplaceFile semantics if ever hot.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         let mut f = loop {
             match std::fs::File::create(&tmp) {
                 Ok(f) => break f,
                 Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-                    open_retries -= 1;
-                    if open_retries == 0 {
+                    if std::time::Instant::now() >= deadline {
                         return Err(e);
                     }
                     std::thread::sleep(std::time::Duration::from_millis(10));
@@ -69,20 +72,20 @@ pub fn write_atomic(path: &std::path::Path, contents: &str) -> std::io::Result<(
         };
         f.write_all(contents.as_bytes())?;
         f.sync_all()?;
-        // Windows has no atomic replace-while-dest-open: a concurrent writer
-        // or reader holding the destination yields ERROR_SHARING_VIOLATION /
-        // ACCESS_DENIED. Retry briefly — the other side finishes fast.
-        // ponytail: fixed 10 x 10ms; use ReplaceFile semantics if ever hot.
-        for attempt in 0..10 {
+        // Rename: same retry class as the open above (dest held open
+        // transiently by readers/AV on Windows).
+        loop {
             match std::fs::rename(&tmp, path) {
                 Ok(()) => return Ok(()),
-                Err(e) if attempt < 9 && e.kind() == std::io::ErrorKind::PermissionDenied => {
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    if std::time::Instant::now() >= deadline {
+                        return Err(e);
+                    }
                     std::thread::sleep(std::time::Duration::from_millis(10));
                 }
                 Err(e) => return Err(e),
             }
         }
-        unreachable!()
     })();
     if res.is_err() {
         let _ = std::fs::remove_file(&tmp); // don't leak a failed tmp

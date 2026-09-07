@@ -184,12 +184,15 @@ mod tests {
     use super::*;
 
     fn tempdir() -> std::path::PathBuf {
+        // Unique per invocation (see settings.rs for rationale).
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static N: AtomicU64 = AtomicU64::new(0);
         let d = std::env::temp_dir().join(format!(
-            "streamy-profiles-test-{}-{}",
+            "streamy-profiles-test-{}-{:?}-{}",
             std::process::id(),
-            line!()
+            std::thread::current().id(),
+            N.fetch_add(1, Ordering::Relaxed)
         ));
-        let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
     }
@@ -202,7 +205,6 @@ mod tests {
             store.list().is_empty(),
             "no profiles.json yet => empty list"
         );
-        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -211,7 +213,6 @@ mod tests {
         std::fs::write(d.join("profiles.json"), b"~~~ not json ~~~").unwrap();
         let store = ProfileStore::new_no_keyring(d.clone());
         assert!(store.list().is_empty());
-        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -240,6 +241,5 @@ mod tests {
             listed[0].plaintext_pw.is_none(),
             "list() must never include plaintext passwords"
         );
-        let _ = std::fs::remove_dir_all(&d);
     }
 }

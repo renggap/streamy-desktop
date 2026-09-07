@@ -120,12 +120,17 @@ mod tests {
     use super::*;
 
     fn tempdir() -> std::path::PathBuf {
+        // Unique per invocation: pid + thread + global counter. Fixed
+        // names collided across test reruns and teardown raced parallel
+        // tests (seen as flaky "File not found" under Wine stress).
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static N: AtomicU64 = AtomicU64::new(0);
         let d = std::env::temp_dir().join(format!(
-            "streamy-settings-test-{}-{}",
+            "streamy-settings-test-{}-{:?}-{}",
             std::process::id(),
-            line!()
+            std::thread::current().id(),
+            N.fetch_add(1, Ordering::Relaxed)
         ));
-        let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
     }
@@ -136,7 +141,6 @@ mod tests {
         let s = SettingsStore::new(d.clone()).get();
         assert_eq!(s.volume, 1.0, "first run must be unity volume, not silent");
         assert!(s.input_device.is_none());
-        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -145,7 +149,6 @@ mod tests {
         std::fs::write(d.join("settings.json"), b"{ not json").unwrap();
         let s = SettingsStore::new(d.clone()).get();
         assert_eq!(s.volume, 1.0, "corrupt file must fall back to defaults");
-        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
