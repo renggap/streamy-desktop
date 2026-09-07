@@ -281,10 +281,12 @@ cross-built PE32+ test binaries were actually **executed** under Wine 10
   before close; immediate close RSTs unread data on some stacks (seen
   under Wine), corrupting a clean 401 into "connection reset".
 
-Cross-platform matrix at this commit: Linux `cargo test` **104/0**,
-clippy 0 warnings; Windows-under-Wine lib **65/65** + integration
-**37/37**. Still not covered: GUI rendering and real audio devices on
-Windows (no Windows machine here).
+Cross-platform matrix at this commit: Linux `cargo test` **104/0**
+(65 lib + 37 integration + 2 non-ignored live Icecast tests),
+clippy 0 warnings; Windows-under-Wine **lib 65/65 + integration 37/37**
+(the 2 live tests need a running Icecast and were not rerun under Wine).
+Still not covered: GUI rendering and real audio devices on Windows
+(no Windows machine here).
 
 **Not done (deliberate):** decode-off-thread refactor (#3.2), CRLF
 hardening in ICY headers, encoder-rate-fallback matching (no user-visible
