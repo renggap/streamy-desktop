@@ -25,6 +25,12 @@ jobs:
       - name: cargo test
         working-directory: src-tauri
         run: cargo test --locked
+      - name: cargo fmt
+        working-directory: src-tauri
+        run: cargo fmt --check
+      - name: cargo clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --locked -- -D warnings
 
   frontend-check:
     runs-on: ubuntu-latest
