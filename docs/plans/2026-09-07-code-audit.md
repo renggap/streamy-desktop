@@ -189,7 +189,8 @@ Post-remediation this runs as the committed, repeatable test
 ## 7. Remediation (2026-09-07, post-audit)
 
 All priority fixes from §5 landed. Every fix has a regression test; full suite
-90 passed / 0 failed (was 86), clippy 0 warnings (was 4), npm audit 0
+104 passed / 0 failed (86 pre-audit; 90 after the fixes below; 104 after the
+deeper validation pass), clippy 0 warnings (was 4), npm audit 0
 vulnerabilities (was 2 dev-only).
 
 | Finding | Fix | Commit | Verification |
@@ -216,7 +217,8 @@ vulnerabilities (was 2 dev-only).
 - Ultravox live tests remain DNAS-only: a real Icecast server correctly
   closes the unknown protocol (`early eof`) — expected server behavior, not a
   regression. The DNAS endpoint from §6 is still occupied (`NAK:Stream In Use`).
-- `cargo test` 90/0, `cargo clippy --all-targets` 0 warnings,
+- At remediation time: `cargo test` 90/0. After the validation pass:
+  `cargo test --locked` 104/0, `cargo clippy --all-targets` 0 warnings,
   `svelte-check` 0/0, `vite build` clean (101 kB JS / 33 kB CSS).
 
 
