@@ -1,47 +1,86 @@
-# Svelte + TS + Vite
+# streamy-desktop
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+Winamp-style desktop broadcaster: dual decks + live mic over Shoutcast v2 /
+Icecast, with MP3/AAC encoding and local recording. Tauri v2 (Rust core,
+Svelte 5 UI).
 
-## Recommended IDE Setup
+## Features
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+- **Dual decks** with per-deck 3-band EQ, equal-power crossfader, cue-free
+  quick mix. MP3/FLAC/WAV decode via Symphonia, resampled to the output
+  device rate (linear interpolation).
+- **Live mic** with auto-duck (music RMS drives gain), mic-monitor gain, and
+  rate-matched resampling (a 48 kHz mic into a 44.1 kHz output stays in pitch).
+- **Broadcast** MP3 (Shine, fixed-point) or AAC-LC (fdk-aac-encoder) to
+  Shoutcast v2 (ICY + ultravox admin) or Icecast (ICY + admin.cgi metadata).
+  Auto-reconnect with fresh handshake; drop-oldest tap keeps the encoder
+  realtime if the uplink stalls (audience skips forward, never freezes).
+- **Record** the broadcast mix to MP3/AAC locally; recording works without
+  being connected.
+- **Meters**: stereo peak/RMS for music and mic, blocky Winamp-style bars.
+- Profiles, playlist (persisted, dedup'd), settings, diagnostics log — all
+  written atomically (temp + rename).
 
-## Need an official Svelte framework?
+## Layout
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
-
-## Technical considerations
-
-**Why use this over SvelteKit?**
-
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
-
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
-
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
-
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
-
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
-
-**Why include `.vscode/extensions.json`?**
-
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
-
-**Why enable `allowJs` in the TS template?**
-
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
 ```
+src/               Svelte 5 UI (App.svelte + lib/ components)
+src-tauri/src/
+  engine/          audio core: engine loop, decks, EQ, rings, meter, mic
+  encode/          Shine MP3 + AAC wrappers (rate fallback to 44.1k)
+  stream/          Shoutcast v2 / Icecast clients, reconnect, metadata
+  record/          file recorder (MP3/AAC)
+  playlist/ profile/ settings/   persisted state
+  commands.rs      Tauri IPC surface
+```
+
+## Develop
+
+```bash
+npm install
+npm run tauri dev     # desktop app, hot-reload frontend
+```
+
+Rust only:
+
+```bash
+cd src-tauri
+cargo test            # 90 unit tests (2 live-stream tests are #[ignore])
+cargo clippy
+```
+
+Frontend only:
+
+```bash
+npm run check         # svelte-check
+npm run build         # vite production build
+```
+
+## Test against a local Icecast
+
+```bash
+docker run -d --name icecast -p 8200:8200 \
+  -e ICECAST_SOURCE_PASSWORD=srcpass -e ICECAST_ADMIN_PASSWORD=adminpass \
+  moul/icecast
+```
+
+Then run the ignored live tests (see `src-tauri/tests/stream_live.rs` for
+env vars) or add a profile in the UI pointing at `http://localhost:8200`.
+
+## Build installers
+
+CI (`.github/workflows/build-windows.yml`) builds the Windows MSI/NSIS on
+every push and stamps `run_number` as the patch version. `test.yml` runs
+`cargo test --locked` + `svelte-check` on every push/PR.
+
+```bash
+npm run tauri build
+```
+
+## Notes / known limits
+
+- Decode and file I/O currently happen on the realtime audio thread; fine at
+  current buffer sizes but the next refactor should move decode to a worker
+  thread feeding a ring (see `docs/audit-*.md` for the plan).
+- Recording is broadcast-mix only (no per-source stems, no AAC+ADTS raw).
+- No repeat/shuffle modes, no per-deck EQ presets (design stretch goals).
