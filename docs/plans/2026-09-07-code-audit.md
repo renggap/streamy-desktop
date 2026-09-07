@@ -203,7 +203,7 @@ vulnerabilities (was 2 dev-only).
 | #3.5-4 error spam | `audio_loop` retry emits each **distinct** failure once (thread-local dedupe), not once/second. | `77f979f` | manual: headless retry loop no longer floods the event bus (25s Xvfb run previously confirmed the spam). |
 | #3.5-5 non-atomic writes | `diag::write_atomic` (temp `.json.tmp` + `fsync` + rename) backs settings/profiles/playlist. | `9c6f2f3` | existing round-trip tests pass on the atomic path. |
 | #3.5-2 playlist dupes | `Playlist::add` skips duplicate paths. | `9c6f2f3` | `add_skips_duplicate_paths`. |
-| CI zero tests | `.github/workflows/test.yml`: `cargo test --locked` + `npm run check` on every push/PR (ubuntu), separate from the Windows release build. | `475eb5a` | workflow mirrors the exact commands run locally in this report. |
+| CI zero tests | `.github/workflows/test.yml`: `cargo test --locked` + `cargo fmt --check` + `cargo clippy --all-targets --locked -- -D warnings` + `npm run check` on every push/PR (ubuntu). `build-windows.yml` runs `cargo test --locked` on real `windows-latest` before packaging (all 3 Windows-only defects in §7 were invisible to Linux). | `475eb5a`, `9f9e0c3`, `b4e8f2c` | workflow mirrors the exact commands run locally in this report. |
 | npm audit (dev-only) | `npm audit fix` applied; 0 vulnerabilities. | `475eb5a` | `npm audit` → "found 0 vulnerabilities". |
 | clippy 4 warnings | all fixed or allowed with rationale (module_inception, new_ret_no_self, large_enum_variant ×2, needless borrow). | `dc3d7c4` | `cargo clippy --all-targets` → 0 warnings. |
 | README stock Vite | rewritten: real features, layout, dev/test/build commands, local-Icecast recipe, known limits. | `9aa441e` | — |
