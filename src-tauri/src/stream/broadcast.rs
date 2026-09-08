@@ -16,7 +16,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+/// UI event sink. The broadcast core is UI-free; the app passes a closure
+/// that forwards to the Tauri event bus. This keeps `tauri` (and its muda/
+/// comctl32-v6 webview deps) out of pure-network test binaries — without
+/// this seam, test exes imported TaskDialogIndirect (comctl32 v6 only) and
+/// died with STATUS_ENTRYPOINT_NOT_FOUND on real Windows (Wine's comctl32
+/// exports it unconditionally, masking the bug).
+pub type EventEmitter = Arc<dyn Fn(&str, serde_json::Value) + Send + Sync>;
+
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
@@ -114,7 +121,7 @@ pub async fn start(
     rx: StereoRingConsumer,
     cfg: StreamConfig,
     enc_cfg: EncoderConfig,
-    app: Option<AppHandle>,
+    app: Option<EventEmitter>,
 ) -> Result<BroadcastHandle, String> {
     start_with_opts(
         rx,
@@ -134,7 +141,7 @@ pub async fn start_with_opts(
     rx: StereoRingConsumer,
     cfg: StreamConfig,
     enc_cfg: EncoderConfig,
-    app: Option<AppHandle>,
+    app: Option<EventEmitter>,
     backoff_base: Duration,
     backoff_max: Duration,
     handshake_timeout_secs: u64,
@@ -306,7 +313,7 @@ async fn run_stream(
     mp3_rx: &mut mpsc::Receiver<Vec<u8>>,
     metadata_rx: &mut mpsc::Receiver<String>,
     stop: &Arc<AtomicBool>,
-    app: &Option<AppHandle>,
+    app: &Option<EventEmitter>,
     total_bytes: &mut u64,
 ) -> bool {
     let mut last_bytes = 0u64;
@@ -437,9 +444,12 @@ impl BroadcastHandle {
     }
 }
 
-fn emit_status(app: &Option<AppHandle>, status: StreamStatus) {
+fn emit_status(app: &Option<EventEmitter>, status: StreamStatus) {
     if let Some(a) = app {
-        let _ = a.emit(events::STREAM_STATUS, status);
+        a(
+            events::STREAM_STATUS,
+            serde_json::to_value(status).unwrap_or_default(),
+        );
     }
 }
 
@@ -447,15 +457,14 @@ fn kbps_from_delta(bytes: u64) -> f64 {
     (bytes * 8) as f64 / 1000.0
 }
 
-fn emit_stats(app: &Option<AppHandle>, total_bytes: u64, last_bytes: u64) {
+fn emit_stats(app: &Option<EventEmitter>, total_bytes: u64, last_bytes: u64) {
     if let Some(a) = app {
-        let _ = a.emit(
-            events::STREAM_STATS,
-            StreamStats {
-                kbps: kbps_from_delta(total_bytes.saturating_sub(last_bytes)),
-                total_bytes,
-            },
-        );
+        let v = serde_json::to_value(StreamStats {
+            kbps: kbps_from_delta(total_bytes.saturating_sub(last_bytes)),
+            total_bytes,
+        })
+        .unwrap_or_default();
+        a(events::STREAM_STATS, v);
     }
 }
 

@@ -433,7 +433,16 @@ async fn connect_stream_inner(
 
     let (tx, rx) = crate::engine::ring::StereoRing::new(16384);
     engine.set_broadcast_producer(Some(tx));
-    match broadcast::start(rx, stream_cfg, enc_cfg, Some(app.clone())).await {
+    // Forward broadcast events to the Tauri event bus. The broadcast core
+    // stays UI-free (see broadcast::EventEmitter docs).
+    let emitter: broadcast::EventEmitter = {
+        let app = app.clone();
+        std::sync::Arc::new(move |event: &str, payload: serde_json::Value| {
+            use tauri::Emitter;
+            let _ = app.emit(event, payload);
+        })
+    };
+    match broadcast::start(rx, stream_cfg, enc_cfg, Some(emitter)).await {
         Ok(h) => {
             // Decide under the lock, drop it, then await. MutexGuard is not
             // Send and must never be held across an await.

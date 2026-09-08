@@ -318,6 +318,19 @@ fmt-clean — 29 files, whitespace-only): Linux `cargo test --locked`
 PATH for tauri-winres) — 14/14 exes, 109/109 tests; live Icecast
 re-run at HEAD: SOURCE /audit-icy.mp3 200 in server access.log.
 
+Windows CI failure root-caused and fixed (5th real defect class):
+`stream_live`/`stream_reconnect` exes died at startup on real Windows
+with STATUS_ENTRYPOINT_NOT_FOUND. Cause chain: `broadcast.rs` took
+`tauri::AppHandle` for event emission → linking the full Tauri app
+crate (muda menus) into pure-network test binaries → static import of
+`TaskDialogIndirect`, which exists only in comctl32 **v6**; without a
+v6 side-by-side manifest, real Windows resolves comctl32 v5.82 and the
+process dies before main. Wine masked it (its comctl32 exports the
+symbol unconditionally). Fix: `broadcast::EventEmitter` closure seam —
+the core stays UI-free; commands.rs forwards to the Tauri bus. Proof:
+`llvm-objdump` shows 0 comctl32/TaskDialogIndirect imports in all
+stream test exes; Wine matrix 14/14 / 109/109; Linux 109/0.
+
 Release-profile validation (the profile CI actually ships): cross-built
 `--release` PE32+ (16.2 MB) boots under Wine, survives 15 s, logs only
 the expected `no output device` guard (first-run WARN fix confirmed
