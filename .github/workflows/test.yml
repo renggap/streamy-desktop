@@ -25,7 +25,11 @@ jobs:
       - name: Install Tauri system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev
+          sudo apt-get install -y \
+            libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libxdo-dev libasound2-dev libdbus-1-dev \
+            libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libappindicator3-dev
       # Tests are pure-Rust (no display/audio needed: cpal streams never
       # open in unit tests; the ALSA error-path tests tolerate no device).
       - name: cargo test
