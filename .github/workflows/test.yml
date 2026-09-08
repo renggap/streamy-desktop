@@ -20,6 +20,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      # Tauri's Linux build needs system glib/gtk/webkit dev packages;
+      # a bare runner has none (glib-sys build script fails otherwise).
+      - name: Install Tauri system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev
       # Tests are pure-Rust (no display/audio needed: cpal streams never
       # open in unit tests; the ALSA error-path tests tolerate no device).
       - name: cargo test
