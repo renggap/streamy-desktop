@@ -29,17 +29,17 @@
 <div class="space-y-2 text-xs">
   <div class="flex items-center justify-between gap-2">
     <div class="min-w-0">
-      <div class="truncate text-gray-700">{$recDir ?? 'Default (app data)'}</div>
+      <div class="truncate text-gray-300">{$recDir ?? 'Default (app data)'}</div>
     </div>
     <div class="flex shrink-0 gap-2">
       <button
-        class="rounded-lg bg-gray-100 px-3 py-1.5 font-semibold text-gray-800 shadow-sm transition-colors hover:bg-gray-200"
+        class="rounded-lg bg-gray-800 px-3 py-1.5 font-semibold text-gray-200 shadow-sm transition-colors hover:bg-gray-700"
         onclick={browse}
         >Browse…</button
       >
       {#if $recDir}
         <button
-          class="rounded-lg bg-gray-100 px-3 py-1.5 font-semibold text-gray-500 shadow-sm transition-colors hover:bg-gray-200"
+          class="rounded-lg bg-gray-800 px-3 py-1.5 font-semibold text-gray-400 shadow-sm transition-colors hover:bg-gray-700"
           onclick={reset}
           >Reset</button
         >

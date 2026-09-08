@@ -80,23 +80,23 @@
   <h3 class="joko-label">
     {isEditing ? 'Edit profile' : 'New profile'}
   </h3>
-  <div class="grid grid-cols-2 gap-2 text-xs text-gray-700">
+  <div class="grid grid-cols-2 gap-2 text-xs text-gray-300">
     <label class="flex flex-col gap-1"
-      >Name <input class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-900 focus:border-lime-500" bind:value={editing.name} disabled={isEditing} /></label
+      >Name <input class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 focus:border-lime-500" bind:value={editing.name} disabled={isEditing} /></label
     >
     <label class="flex flex-col gap-1"
-      >Host <input class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-900 focus:border-lime-500" bind:value={editing.host} /></label
+      >Host <input class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 focus:border-lime-500" bind:value={editing.host} /></label
     >
     <label class="flex flex-col gap-1"
-      >Port <input type="number" class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-900 focus:border-lime-500" bind:value={editing.port} /></label
+      >Port <input type="number" class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 focus:border-lime-500" bind:value={editing.port} /></label
     >
     <label class="flex flex-col gap-1"
-      >Stream ID <input type="number" class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-900 focus:border-lime-500" bind:value={editing.stream_id} /></label
+      >Stream ID <input type="number" class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 focus:border-lime-500" bind:value={editing.stream_id} /></label
     >
     <label class="flex flex-col gap-1"
       >Mount
       <input
-        class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-900 focus:border-lime-500"
+        class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 focus:border-lime-500"
         bind:value={editing.mount}
         placeholder="/"
       /></label
@@ -104,23 +104,23 @@
     <label class="flex flex-col gap-1"
       >Username
       <input
-        class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-900 focus:border-lime-500"
+        class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 focus:border-lime-500"
         bind:value={editing.user}
         placeholder="(Icecast source/DJ login)"
       /></label
     >
-    <div class="col-span-2 text-[10px] leading-relaxed text-gray-500">
+    <div class="col-span-2 text-[10px] leading-relaxed text-gray-400">
       Streamy auto-detects the protocol on connect — it tries Ultravox 2.1 (DNASv2) first, then falls
-      back to Icecast / Liquidsoap harbor. <span class="text-gray-700">Stream ID</span> is used for
-      Ultravox; <span class="text-gray-700">Mount</span> for Icecast. <span class="text-gray-700"
+      back to Icecast / Liquidsoap harbor. <span class="text-gray-300">Stream ID</span> is used for
+      Ultravox; <span class="text-gray-300">Mount</span> for Icecast. <span class="text-gray-300"
         >Username</span
       > is the Icecast source/DJ login, or the optional Ultravox DJ id (leave blank for Ultravox
       source login).
     </div>
-    <label class="col-span-2 flex items-center gap-2 text-xs text-gray-700">
-      <input type="checkbox" class="h-4 w-4 accent-lime-600" bind:checked={editing.azuracast} />
+    <label class="col-span-2 flex items-center gap-2 text-xs text-gray-300">
+      <input type="checkbox" class="h-4 w-4 accent-lime-500" bind:checked={editing.azuracast} />
       AzuraCast server
-      <span class="text-[10px] text-gray-500"
+      <span class="text-[10px] text-gray-400"
         >— DJ/source connects via Icecast even if it relays to Shoutcast DNAS for listeners. Skips the
         Ultravox probe so DJ login is immediate.</span
       >
@@ -129,19 +129,19 @@
       >Password
       <input
         type="password"
-        class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-900 focus:border-lime-500"
+        class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 focus:border-lime-500"
         bind:value={password}
         placeholder={isEditing ? '(unchanged)' : ''}
       /></label
     >
     <label class="flex flex-col gap-1"
-      >Station name <input class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-900 focus:border-lime-500" bind:value={editing.station_name} /></label
+      >Station name <input class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 focus:border-lime-500" bind:value={editing.station_name} /></label
     >
     <label class="flex flex-col gap-1"
-      >Genre <input class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-900 focus:border-lime-500" bind:value={editing.genre} /></label
+      >Genre <input class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 focus:border-lime-500" bind:value={editing.genre} /></label
     >
     <label class="col-span-2 flex flex-col gap-1"
-      >URL <input class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-900 focus:border-lime-500" bind:value={editing.url} /></label
+      >URL <input class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 focus:border-lime-500" bind:value={editing.url} /></label
     >
   </div>
   <div class="flex gap-2">
@@ -152,38 +152,38 @@
     >
     {#if isEditing}
       <button
-        class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm transition-colors hover:bg-gray-200"
+        class="rounded-lg bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-200 shadow-sm transition-colors hover:bg-gray-700"
         onclick={reset}
         >Cancel</button
       >
     {/if}
   </div>
 
-  <div class="border-t border-gray-200 pt-3">
+  <div class="border-t border-gray-600 pt-3">
     <div class="joko-label mb-2">Saved</div>
     <div class="space-y-2">
       {#each $profiles as p (p.name)}
-        <div class="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm">
-          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-lime-100 text-base">📡</span>
+        <div class="flex items-center gap-3 rounded-xl border border-gray-600 bg-gray-800 px-3 py-2.5 shadow-sm">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-lime-900/40 text-base">📡</span>
           <div class="min-w-0 flex-1">
-            <span class="truncate text-sm font-medium text-gray-900">{p.name}</span>
-            <div class="truncate text-[11px] text-gray-500"
+            <span class="truncate text-sm font-medium text-gray-100">{p.name}</span>
+            <div class="truncate text-[11px] text-gray-400"
               >{p.host}<span class="text-gray-400">:{p.port}</span>{p.mount || '/'}</div
             >
           </div>
           <div class="flex shrink-0 gap-1">
             <button
-              class="rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-medium text-gray-800 transition-colors hover:bg-gray-200"
+              class="rounded-lg bg-gray-800 px-2.5 py-1.5 text-[11px] font-medium text-gray-200 transition-colors hover:bg-gray-700"
               onclick={() => edit(p)}>Edit</button
             >
             <button
-              class="rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-medium text-red-700 transition-colors hover:bg-red-100"
+              class="rounded-lg bg-red-900/30 px-2.5 py-1.5 text-[11px] font-medium text-red-400 transition-colors hover:bg-red-900/50"
               onclick={() => remove(p.name)}>Delete</button
             >
           </div>
         </div>
       {:else}
-        <div class="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-xs text-gray-500">
+        <div class="rounded-xl border border-dashed border-gray-500 px-4 py-6 text-center text-xs text-gray-400">
           No saved profiles — fill the form above.
         </div>
       {/each}

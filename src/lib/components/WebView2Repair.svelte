@@ -40,13 +40,13 @@
 
   {#if $wv2State === 'downloading'}
     <div>
-      <div class="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+      <div class="h-2 w-full overflow-hidden rounded-full bg-gray-800">
         <div
           class="h-full rounded-full bg-gradient-to-r from-lime-400 to-lime-600 transition-[width]"
           style="width: {$wv2Progress.total ? pct : 40}%"
         ></div>
       </div>
-      <div class="mt-1 text-[10px] text-gray-500">
+      <div class="mt-1 text-[10px] text-gray-400">
         {#if $wv2Progress.total}
           {mb($wv2Progress.downloaded)} / {mb($wv2Progress.total)} MB
         {:else}
@@ -57,10 +57,10 @@
   {/if}
 
   {#if $wv2State === 'done'}
-    <div class="text-[11px] text-lime-600">
+    <div class="text-[11px] text-lime-400">
       ✓ Installer launched — follow the Microsoft prompts, then relaunch Streamy.
     </div>
   {:else if $wv2State === 'err'}
-    <div class="text-[11px] text-red-600">✕ Download failed — check your connection and retry.</div>
+    <div class="text-[11px] text-red-400">✕ Download failed — check your connection and retry.</div>
   {/if}
 </div>

@@ -112,11 +112,11 @@
         {/if}
         <span
           class="relative inline-flex h-3 w-3 rounded-full {connected
-            ? 'onair-beat bg-lime-500'
+            ? 'onair-beat bg-lime-400'
             : 'bg-gray-300'}"
         ></span>
       </span>
-      <span class={connected ? 'text-lime-600' : 'text-gray-400'}>{connected ? 'ON AIR' : 'OFF AIR'}</span>
+      <span class={connected ? 'text-lime-400' : 'text-gray-400'}>{connected ? 'ON AIR' : 'OFF AIR'}</span>
     </div>
   </div>
 
@@ -126,7 +126,7 @@
       <label class="block">
         <span class="joko-label mb-1 block">Server</span>
         <select
-          class="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-900 transition-colors focus:border-lime-500 disabled:opacity-60"
+          class="w-full rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-gray-100 transition-colors focus:border-lime-500 disabled:opacity-60"
           bind:value={selected}
           disabled={connected}
         >
@@ -138,7 +138,7 @@
         <label class="block">
           <span class="joko-label mb-1 block">Codec</span>
           <select
-            class="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-900 transition-colors focus:border-lime-500"
+            class="w-full rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-gray-100 transition-colors focus:border-lime-500"
             bind:value={$codec}
             onchange={onCodecChange}
           >
@@ -149,7 +149,7 @@
         <label class="block">
           <span class="joko-label mb-1 block">Bitrate</span>
           <select
-            class="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-900 transition-colors focus:border-lime-500"
+            class="w-full rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-gray-100 transition-colors focus:border-lime-500"
             bind:value={$bitrate}
             onchange={onBitrateChange}
           >
@@ -164,24 +164,24 @@
       <button
         class="flex-1 rounded-lg text-sm font-bold uppercase tracking-wider transition-all
           {connected
-            ? 'bg-red-600 text-white shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-white active:scale-[0.98]'
-            : 'bg-lime-600 text-white shadow-md hover:bg-lime-700 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:ring-offset-2 focus:ring-offset-white active:scale-[0.98]'}"
+            ? 'bg-red-600 text-white shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-800 active:scale-[0.98]'
+            : 'bg-lime-600 text-white shadow-md hover:bg-lime-700 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:ring-offset-2 focus:ring-offset-gray-800 active:scale-[0.98]'}"
         onclick={toggle}
         disabled={busy}
       >
         {busy ? '…' : label}
       </button>
-      <div class="mt-2 text-center text-[10px] uppercase tracking-wider text-gray-500">
+      <div class="mt-2 text-center text-[10px] uppercase tracking-wider text-gray-400">
         {#if connected}
           {$codec.toUpperCase()} · {$bitrate} kbps
         {:else if $streamStatus.state === 'error'}
-          <span class="text-red-600">{$streamStatus.message ?? 'error'}</span>
+          <span class="text-red-400">{$streamStatus.message ?? 'error'}</span>
         {:else}
           idle
         {/if}
       </div>
       {#if connected}
-        <div class="mt-1 text-[10px] tabular-nums text-lime-600">{statsLine}</div>
+        <div class="mt-1 text-[10px] tabular-nums text-lime-400">{statsLine}</div>
       {/if}
     </div>
   </div>
@@ -189,17 +189,17 @@
   <!-- Stream title (songtitle): Ultravox sends it in-band (0x3902); Icecast uses
        the /admin/metadata endpoint. Both reuse the source/DJ creds — no separate
        admin password. -->
-  <div class="mt-3 border-t border-gray-200 pt-3">
+  <div class="mt-3 border-t border-gray-600 pt-3">
     <span class="joko-label mb-1 block">Stream title</span>
     <div class="flex gap-2">
       <input
-        class="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-900 transition-colors placeholder:text-gray-400 focus:border-lime-500"
+        class="min-w-0 flex-1 rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 transition-colors placeholder:text-gray-400 focus:border-lime-500"
         placeholder={$streamTitle || 'song / show name'}
         bind:value={titleDraft}
         onkeydown={(e) => e.key === 'Enter' && sendTitle()}
       />
       <button
-        class="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white shadow-md transition-colors hover:bg-gray-800 disabled:opacity-40"
+        class="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white shadow-md transition-colors hover:bg-gray-700 disabled:opacity-40"
         onclick={sendTitle}
         disabled={!connected || metaStatus === 'sending'}
       >
@@ -207,9 +207,9 @@
       </button>
     </div>
     {#if metaStatus === 'ok'}
-      <div class="mt-1 text-[10px] text-lime-600">✓ Title sent to server</div>
+      <div class="mt-1 text-[10px] text-lime-400">✓ Title sent to server</div>
     {:else if metaStatus === 'err'}
-      <div class="mt-1 text-[10px] text-red-600">✕ Update failed</div>
+      <div class="mt-1 text-[10px] text-red-400">✕ Update failed</div>
     {/if}
   </div>
 </div>

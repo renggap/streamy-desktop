@@ -67,10 +67,10 @@
   }
 </script>
 
-<header class="border-b border-gray-200 bg-white px-4 py-3">
+<header class="border-b border-gray-700 bg-gray-800 px-4 py-3">
   <div class="flex items-center gap-3">
     <div
-      class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-lime-400 to-lime-600 text-lg text-white shadow-md"
+      class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-lime-400 to-lime-500 text-lg text-white shadow-md"
     >
       ♪
     </div>
@@ -81,7 +81,7 @@
       <div class="truncate text-xs opacity-80">{$nowPlaying?.artist || '—'}</div>
     </div>
     <button
-      class="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+      class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-200"
       onclick={onPrev}
       aria-label="Previous"
       >⏮</button
@@ -94,18 +94,18 @@
       {$playing ? '⏸' : '▶'}
     </button>
     <button
-      class="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+      class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-200"
       onclick={onNext}
       aria-label="Next"
       >⏭</button
     >
   </div>
 
-  <div class="mt-3 flex items-center gap-2 text-[10px] tabular-nums text-gray-500">
+  <div class="mt-3 flex items-center gap-2 text-[10px] tabular-nums text-gray-400">
     <span class="w-8 text-right">{fmt(elapsed)}</span>
     <div
       bind:this={trackEl}
-      class="group relative h-1.5 flex-1 cursor-pointer rounded-full bg-gray-200"
+      class="group relative h-1.5 flex-1 cursor-pointer rounded-full bg-gray-700"
       onpointerdown={down}
       onpointermove={move}
       onpointerup={up}
@@ -118,11 +118,11 @@
       aria-valuenow={pct}
     >
       <div
-        class="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-lime-500 to-lime-600"
+        class="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-lime-400 to-lime-500"
         style="width: {pct}%"
       ></div>
       <div
-        class="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow ring-2 ring-lime-500 transition-transform group-hover:scale-110"
+        class="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-100 shadow ring-2 ring-lime-400 transition-transform group-hover:scale-110"
         style="left: {pct}%"
       ></div>
     </div>
@@ -141,6 +141,6 @@
       class="flex-1 cursor-pointer"
       aria-label="Local file volume"
     />
-    <span class="w-10 text-right text-[10px] tabular-nums text-gray-500">{$monitorFileVolume}%</span>
+    <span class="w-10 text-right text-[10px] tabular-nums text-gray-400">{$monitorFileVolume}%</span>
   </div>
 </header>

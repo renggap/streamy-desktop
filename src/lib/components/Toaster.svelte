@@ -16,21 +16,21 @@
 >
   {#each $toasts as t (t.id)}
     <div
-      class="toast-anim pointer-events-auto flex items-start gap-3 rounded-xl border border-gray-200 border-l-4 bg-white p-4 shadow-lg
-        {t.kind === 'success' ? 'border-l-lime-500' : t.kind === 'error' ? 'border-l-red-500 border-red-200 bg-red-50' : 'border-l-gray-400'}"
+      class="toast-anim pointer-events-auto flex items-start gap-3 rounded-xl border border-gray-600 border-l-4 bg-gray-800 p-4 shadow-lg
+        {t.kind === 'success' ? 'border-l-lime-400' : t.kind === 'error' ? 'border-l-red-500 border-red-900/50 bg-red-900/30' : 'border-l-gray-400'}"
       role="status"
     >
-      <div class="shrink-0 {t.kind === 'error' ? 'text-red-500' : 'text-lime-500'}">
+      <div class="shrink-0 {t.kind === 'error' ? 'text-red-500' : 'text-lime-400'}">
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={icons[t.kind]}></path>
         </svg>
       </div>
       <div class="flex-1">
-        <p class="text-sm font-medium text-gray-900">{t.title}</p>
-        {#if t.detail}<p class="mt-1 text-xs text-gray-500">{t.detail}</p>{/if}
+        <p class="text-sm font-medium text-gray-100">{t.title}</p>
+        {#if t.detail}<p class="mt-1 text-xs text-gray-400">{t.detail}</p>{/if}
       </div>
       <button
-        class="shrink-0 text-gray-400 transition-colors hover:text-gray-600"
+        class="shrink-0 text-gray-400 transition-colors hover:text-gray-300"
         onclick={() => dismissToast(t.id)}
         aria-label="Dismiss"
       >

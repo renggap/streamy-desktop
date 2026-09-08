@@ -29,7 +29,7 @@
   <div class="joko-card flex items-center justify-between rounded-xl px-4 py-3">
     <div>
       <div class="joko-label">Playlist</div>
-      <div class="text-[10px] text-gray-500">{$playlist.length} {$playlist.length === 1 ? 'track' : 'tracks'}</div>
+      <div class="text-[10px] text-gray-400">{$playlist.length} {$playlist.length === 1 ? 'track' : 'tracks'}</div>
     </div>
     <button
       class="rounded-lg bg-lime-600 px-3 py-1.5 text-xs font-semibold text-white shadow-md transition-all duration-200 hover:bg-lime-700 active:scale-95"
@@ -43,8 +43,8 @@
   <div class="joko-card overflow-hidden rounded-xl">
     {#each $playlist as track, i (track.path)}
       <button
-        class="group flex w-full items-center gap-3 border-b border-gray-100 px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-lime-50/60 {$currentIndex === i
-          ? 'bg-lime-50'
+        class="group flex w-full items-center gap-3 border-b border-gray-700/60 px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-lime-900/30/60 {$currentIndex === i
+          ? 'bg-lime-900/30'
           : ''}"
         onclick={() => select(i)}
       >
@@ -53,22 +53,22 @@
           {#if $currentIndex === i && $playing}
             <span class="now-playing" aria-label="playing"><i></i><i></i><i></i></span>
           {:else}
-            <span class="text-xs tabular-nums text-gray-400 group-hover:text-gray-600">{i + 1}</span>
+            <span class="text-xs tabular-nums text-gray-400 group-hover:text-gray-300">{i + 1}</span>
           {/if}
         </span>
         <span class="min-w-0 flex-1">
-          <span class="block truncate text-sm {$currentIndex === i ? 'font-medium text-lime-700' : 'text-gray-900'}">{track.title}</span>
-          {#if track.artist}<span class="block truncate text-[11px] text-gray-500">{track.artist}</span>{/if}
+          <span class="block truncate text-sm {$currentIndex === i ? 'font-medium text-lime-300' : 'text-gray-100'}">{track.title}</span>
+          {#if track.artist}<span class="block truncate text-[11px] text-gray-400">{track.artist}</span>{/if}
         </span>
         <span class="shrink-0 text-xs tabular-nums text-gray-400">{fmt(track.duration_secs)}</span>
       </button>
     {:else}
       <div class="flex flex-col items-center gap-3 px-4 py-12 text-center">
         <span class="text-3xl opacity-40">🎵</span>
-        <div class="text-sm text-gray-500">No tracks yet</div>
-        <div class="text-[11px] text-gray-500">Drag audio files onto the window, or</div>
+        <div class="text-sm text-gray-400">No tracks yet</div>
+        <div class="text-[11px] text-gray-400">Drag audio files onto the window, or</div>
         <button
-          class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm transition-colors hover:bg-gray-200"
+          class="rounded-lg bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-200 shadow-sm transition-colors hover:bg-gray-700"
           onclick={addFiles}>Add files</button
         >
       </div>

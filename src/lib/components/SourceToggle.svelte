@@ -18,7 +18,7 @@
     <button
       class="rounded-lg px-2.5 py-1.5 font-medium capitalize transition-colors {$sourceMode === m
         ? 'bg-lime-600 text-white shadow-md'
-        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}"
       onclick={() => pick(m)}>{m}</button
     >
   {/each}

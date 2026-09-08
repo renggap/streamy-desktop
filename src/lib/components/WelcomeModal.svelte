@@ -55,21 +55,21 @@
         </div>
       </div>
 
-      <p class="text-xs leading-relaxed text-gray-700">
+      <p class="text-xs leading-relaxed text-gray-300">
         The Microsoft WebView2 runtime wasn't found on this PC. Streamy needs it to run.
       </p>
-      <p class="mt-2 text-xs leading-relaxed text-gray-500">
+      <p class="mt-2 text-xs leading-relaxed text-gray-400">
         Click repair below — it downloads the official installer with a progress bar and installs
         the runtime. Then relaunch Streamy.
       </p>
 
-      <div class="mt-4 border-t border-gray-200 pt-4">
+      <div class="mt-4 border-t border-gray-600 pt-4">
         <WebView2Repair />
       </div>
 
       <div class="mt-5 flex justify-end">
         <button
-          class="rounded-lg bg-gray-100 px-4 py-2 text-xs font-semibold text-gray-800 shadow-sm transition-colors hover:bg-gray-200"
+          class="rounded-lg bg-gray-800 px-4 py-2 text-xs font-semibold text-gray-200 shadow-sm transition-colors hover:bg-gray-700"
           onclick={dismiss}>Dismiss</button
         >
       </div>

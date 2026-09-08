@@ -17,15 +17,15 @@
 </script>
 
 <nav
-  class="sticky bottom-0 flex items-stretch border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)]"
+  class="sticky bottom-0 flex items-stretch border-t border-gray-700 bg-gray-800/95 pb-[env(safe-area-inset-bottom)]"
 >
   <!-- Streamy Desktop wordmark -->
-  <div class="flex shrink-0 items-center gap-2 border-r border-gray-200 px-4">
+  <div class="flex shrink-0 items-center gap-2 border-r border-gray-700 px-4">
     <span class="eq" aria-hidden="true">
       <i></i><i></i><i></i><i></i>
     </span>
     <span class="leading-none">
-      <span class="block bg-gradient-to-r from-lime-500 to-lime-600 bg-clip-text text-sm font-extrabold tracking-tight text-transparent">
+      <span class="block bg-gradient-to-r from-lime-400 to-lime-500 bg-clip-text text-sm font-extrabold tracking-tight text-transparent">
         Streamy
       </span>
       <span class="block text-[8px] font-semibold tracking-[0.34em] text-gray-400">DESKTOP</span>
@@ -38,8 +38,8 @@
   {#each tabs as t (t.id)}
     <button
       class="relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium uppercase tracking-wider transition-colors {$view === t.id
-        ? 'text-lime-600'
-        : 'text-gray-400 hover:text-gray-700'}"
+        ? 'text-lime-400'
+        : 'text-gray-400 hover:text-gray-300'}"
       onclick={() => view.set(t.id)}
     >
       {#if $view === t.id}
@@ -59,14 +59,14 @@
     height: 18px;
     padding: 2px;
     border-radius: 4px;
-    background: #f9fafb; /* gray-50 */
-    border: 1px solid #e5e7eb; /* gray-200 */
+    background: #111827; /* gray-900 */
+    border: 1px solid #374151; /* gray-700 */
   }
   .eq i {
     width: 3px;
     height: 30%;
     border-radius: 1px;
-    background: #84cc16; /* lime-500 */
+    background: #a3e635; /* lime-400 */
     animation: eq-bounce 1.1s ease-in-out infinite;
   }
   .eq i:nth-child(2) { animation-delay: 0.18s; height: 60%; }

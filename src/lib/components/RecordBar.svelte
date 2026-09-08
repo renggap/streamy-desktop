@@ -50,7 +50,7 @@
 <div class="space-y-2">
   <div class="flex items-center gap-2 text-xs">
     <select
-      class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-900 focus:border-lime-500"
+      class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-gray-100 focus:border-lime-500"
       bind:value={$recFormat}
       disabled={$recording}
     >
@@ -59,17 +59,17 @@
     </select>
     <button
       class="rounded-lg px-3 py-1.5 font-semibold shadow-md transition-all duration-200 active:scale-95 {$recording
-        ? 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+        ? 'bg-gray-700 text-gray-200 hover:bg-gray-600'
         : 'bg-red-600 text-white hover:bg-red-700'}"
       onclick={toggle}
     >
       {label}
     </button>
     {#if $recording}
-      <span class="ml-auto font-mono text-red-600">{fmt(elapsed)}</span>
+      <span class="ml-auto font-mono text-red-400">{fmt(elapsed)}</span>
     {/if}
   </div>
   {#if $recording && $recordingPath}
-    <div class="truncate text-[11px] text-gray-500">→ {$recordingPath}</div>
+    <div class="truncate text-[11px] text-gray-400">→ {$recordingPath}</div>
   {/if}
 </div>

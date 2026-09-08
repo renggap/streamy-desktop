@@ -45,7 +45,7 @@
   <label class="block">
     <span class="joko-label mb-1 block">Microphone</span>
     <select
-      class="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-900 transition-colors focus:border-lime-500"
+      class="w-full rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-gray-100 transition-colors focus:border-lime-500"
       value={$selectedInput}
       onchange={onInput}
     >
@@ -55,7 +55,7 @@
   <label class="block">
     <span class="joko-label mb-1 block">Output</span>
     <select
-      class="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-900 transition-colors focus:border-lime-500"
+      class="w-full rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-gray-100 transition-colors focus:border-lime-500"
       value={$selectedOutput}
       onchange={onOutput}
     >
@@ -66,7 +66,7 @@
   <label class="block">
     <span class="joko-label mb-1 flex items-center justify-between">
       <span>Volume</span>
-      <span class="tabular-nums text-gray-700">{$volume}%</span>
+      <span class="tabular-nums text-gray-300">{$volume}%</span>
     </span>
     <input
       type="range"

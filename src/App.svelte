@@ -139,15 +139,15 @@
   });
 </script>
 
-<main class="flex h-screen flex-col bg-gray-100 text-gray-900">
+<main class="flex h-screen flex-col bg-gray-800 text-gray-100">
   <WelcomeModal />
   <Toaster />
   {#if $errorMsg}
     <div
-      class="flex items-start gap-2 border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800"
+      class="flex items-start gap-2 border-b border-red-900/50 bg-red-900/30 px-4 py-2 text-sm text-red-300"
     >
       <span class="flex-1">{$errorMsg}</span>
-      <button class="text-red-500 hover:text-red-700" onclick={() => errorMsg.set(null)} aria-label="Dismiss error"
+      <button class="text-red-500 hover:text-red-400" onclick={() => errorMsg.set(null)} aria-label="Dismiss error"
         >✕</button
       >
     </div>
@@ -196,7 +196,7 @@
         </div>
         <div class="joko-card rounded-xl p-4">
           <h3 class="joko-label mb-1">Runtime</h3>
-          <p class="mb-3 text-[11px] text-gray-500">
+          <p class="mb-3 text-[11px] text-gray-400">
             WebView2 is auto-installed with Streamy on supported Windows. Run repair if the app ever
             fails to start with a WebView2 message.
           </p>
