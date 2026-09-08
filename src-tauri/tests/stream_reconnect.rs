@@ -74,13 +74,17 @@ fn spawn_producer(tx: streamy_desktop::engine::ring::StereoRingProducer, stop: A
     std::thread::spawn(move || {
         let mut i = 0u32;
         while !stop.load(Ordering::Relaxed) {
-            let s = ((i as f32) * 2.0 * std::f32::consts::PI * 440.0 / 44100.0).sin() * 0.3;
-            tx.push([s, s]); // drop-oldest ring: never blocks
-            {
-                // Pace near realtime so the encoder sees a realistic feed.
-                std::thread::sleep(Duration::from_micros(20));
+            // Burst a frame batch, then sleep once. Per-frame 20us sleeps
+            // collapse to the 1-15ms Windows timer quantum on real Windows
+            // (fine under Wine), starving the encoder so hard the reconnect
+            // test missed its window (CI failure: "expected 3 connects").
+            // One sleep per batch keeps pace without per-frame timer calls.
+            for _ in 0..256 {
+                let s = ((i as f32) * 2.0 * std::f32::consts::PI * 440.0 / 44100.0).sin() * 0.3;
+                tx.push([s, s]); // drop-oldest ring: never blocks
+                i = i.wrapping_add(1);
             }
-            i = i.wrapping_add(1);
+            std::thread::sleep(Duration::from_millis(2));
         }
     });
 }
@@ -155,11 +159,13 @@ async fn reconnects_with_backoff_after_drops() {
     .await
     .expect("initial connect");
 
-    // Phase 1: wait (up to ~10s) for the client to reconnect past every drop.
+    // Phase 1: wait (up to ~30s) for the client to reconnect past every drop.
+    // Generous for slow CI VMs: the encoder thread + producer must push 3 MP3
+    // chunks through LAME under whatever CPU the runner gives us.
     // Each drop connection also receives a couple of MP3 frames before closing,
     // so `total > 0` alone is NOT proof — the connect count is.
     let mut connects = 0usize;
-    for _ in 0..200 {
+    for _ in 0..600 {
         connects = accept_times.lock().unwrap().len();
         if connects >= (drops + 1) as usize {
             break;
@@ -171,7 +177,7 @@ async fn reconnects_with_backoff_after_drops() {
     // climbing after the last reconnect, not just the drop-connection leftovers).
     let total0 = total.load(Ordering::SeqCst);
     let mut got = total0;
-    for _ in 0..40 {
+    for _ in 0..120 {
         tokio::time::sleep(Duration::from_millis(50)).await;
         got = total.load(Ordering::SeqCst);
         if got > total0 + 500 {

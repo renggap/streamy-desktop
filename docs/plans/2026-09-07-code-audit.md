@@ -318,6 +318,16 @@ fmt-clean — 29 files, whitespace-only): Linux `cargo test --locked`
 PATH for tauri-winres) — 14/14 exes, 109/109 tests; live Icecast
 re-run at HEAD: SOURCE /audit-icy.mp3 200 in server access.log.
 
+2nd Windows CI failure root-caused and fixed (test pacing, 6th defect):
+`reconnects_with_backoff_after_drops` got 2/3 connects in 10 s on the
+real runner (passed under Wine). Cause: the test producer slept 20 µs
+per audio frame; real Windows rounds sleeps up to the 1–15 ms timer
+quantum, starving the encoder ~50–100× (Wine honors µs sleeps, masking
+it). Fix: burst 256 frames per 2 ms sleep, and raise patience 10 s→
+30 s / phase-2 2 s→6 s for slow CI VMs. Proof: Windows exe 2/2 in
+0.65 s (was 11.98 s + fail), 0.8 s under 3-CPU-burner starvation,
+full Wine matrix 14/14 / 109/109, Linux 109/0.
+
 Windows CI failure root-caused and fixed (5th real defect class):
 `stream_live`/`stream_reconnect` exes died at startup on real Windows
 with STATUS_ENTRYPOINT_NOT_FOUND. Cause chain: `broadcast.rs` took
