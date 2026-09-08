@@ -54,6 +54,7 @@
   import WebView2Repair from './lib/components/WebView2Repair.svelte';
   import WelcomeModal from './lib/components/WelcomeModal.svelte';
   import BottomNav from './lib/components/BottomNav.svelte';
+  import Toaster from './lib/components/Toaster.svelte';
 
   onMount(() => {
     listPlaylist().then((snap) => {
@@ -138,14 +139,17 @@
   });
 </script>
 
-<main class="flex h-screen flex-col bg-gray-900 text-gray-200">
+<main class="flex h-screen flex-col bg-gray-100 text-gray-900">
   <WelcomeModal />
+  <Toaster />
   {#if $errorMsg}
     <div
-      class="flex items-start gap-2 border-b border-red-900 bg-red-950/40 px-4 py-2 text-sm text-red-200"
+      class="flex items-start gap-2 border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800"
     >
       <span class="flex-1">{$errorMsg}</span>
-      <button class="text-red-300 hover:text-red-100" onclick={() => errorMsg.set(null)}>✕</button>
+      <button class="text-red-500 hover:text-red-700" onclick={() => errorMsg.set(null)} aria-label="Dismiss error"
+        >✕</button
+      >
     </div>
   {/if}
 
@@ -158,44 +162,40 @@
       <div class="space-y-4 p-4">
         <BroadcastBar />
         <div class="grid grid-cols-2 gap-4">
-          <div class="retro-chrome rounded-lg p-4">
-            <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Record</h3>
+          <div class="joko-card rounded-xl p-4">
+            <h3 class="joko-label mb-2">Record</h3>
             <RecordBar />
           </div>
-          <div class="retro-chrome rounded-lg p-4">
-            <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Source</h3>
+          <div class="joko-card rounded-xl p-4">
+            <h3 class="joko-label mb-2">Source</h3>
             <SourceToggle />
           </div>
         </div>
-        <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Levels</h3>
+        <div class="joko-card rounded-xl p-4">
+          <h3 class="joko-label mb-2">Levels</h3>
           <Meters />
         </div>
-        <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Mixer</h3>
+        <div class="joko-card rounded-xl p-4">
+          <h3 class="joko-label mb-2">Mixer</h3>
           <Mixer />
         </div>
       </div>
     {:else}
       <div class="space-y-4 p-4">
-        <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Devices</h3>
+        <div class="joko-card rounded-xl p-4">
+          <h3 class="joko-label mb-3">Devices</h3>
           <DeviceChoosers />
         </div>
-        <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
-            Recording folder
-          </h3>
+        <div class="joko-card rounded-xl p-4">
+          <h3 class="joko-label mb-3">Recording folder</h3>
           <RecordingSettings />
         </div>
-        <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
-            Connection profiles
-          </h3>
+        <div class="joko-card rounded-xl p-4">
+          <h3 class="joko-label mb-3">Connection profiles</h3>
           <ProfileManager />
         </div>
-        <div class="retro-chrome rounded-lg p-4">
-          <h3 class="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Runtime</h3>
+        <div class="joko-card rounded-xl p-4">
+          <h3 class="joko-label mb-1">Runtime</h3>
           <p class="mb-3 text-[11px] text-gray-500">
             WebView2 is auto-installed with Streamy on supported Windows. Run repair if the app ever
             fails to start with a WebView2 message.

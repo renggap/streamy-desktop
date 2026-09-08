@@ -1,5 +1,6 @@
 <script lang="ts">
   import { profiles, streamStatus, bitrate, codec, view, errorMsg, streamTitle, streamStats } from '../stores';
+  import { notify } from '../stores';
   import { connectStream, disconnectStream, setStreamTitle, BITRATES } from '../api';
 
   // ponytail: localStorage is enough; move to profiles.json "last_used" if
@@ -34,19 +35,23 @@
 
   async function toggle() {
     if (connected) {
+      notify('info', 'Disconnecting…', selected || undefined);
       await disconnectStream();
       return;
     }
     const name = selected || $profiles[0]?.name;
     if (!name) {
+      notify('error', 'No profile', 'Add a connection profile first.');
       view.set('settings');
       return;
     }
     selected = name;
+    notify('info', 'Connecting…', name);
     try {
       await connect(name);
     } catch (e) {
       errorMsg.set(String(e));
+      notify('error', 'Connect failed', String(e));
     }
   }
 
@@ -54,6 +59,7 @@
     if (!connected) return;
     const name = selected || $profiles[0]?.name;
     if (!name) return;
+    notify('info', 'Reconnecting…', `${$codec.toUpperCase()} · ${$bitrate} kbps`);
     try {
       await disconnectStream();
       await connect(name);
@@ -79,9 +85,11 @@
       streamTitle.set(t);
       titleDraft = '';
       metaStatus = 'ok';
+      notify('success', 'Title updated', t);
     } catch (e) {
       metaStatus = 'err';
       errorMsg.set(String(e));
+      notify('error', 'Title update failed', String(e));
     }
     metaTimer = setTimeout(() => {
       metaStatus = 'idle';
@@ -93,9 +101,9 @@
   );
 </script>
 
-<div class="retro-chrome rounded-lg p-4">
+<div class="joko-card rounded-xl p-4">
   <div class="mb-3 flex items-center justify-between">
-    <h3 class="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Broadcast</h3>
+    <h3 class="joko-label">Broadcast</h3>
     <!-- On-air indicator -->
     <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
       <span class="relative flex h-3 w-3">
@@ -104,11 +112,11 @@
         {/if}
         <span
           class="relative inline-flex h-3 w-3 rounded-full {connected
-            ? 'onair-beat bg-lime-400'
-            : 'bg-gray-600'}"
+            ? 'onair-beat bg-lime-500'
+            : 'bg-gray-300'}"
         ></span>
       </span>
-      <span class={connected ? 'text-lime-400' : 'text-gray-500'}>{connected ? 'ON AIR' : 'OFF AIR'}</span>
+      <span class={connected ? 'text-lime-600' : 'text-gray-400'}>{connected ? 'ON AIR' : 'OFF AIR'}</span>
     </div>
   </div>
 
@@ -116,9 +124,9 @@
     <!-- Left: server + codec + bitrate -->
     <div class="space-y-2 text-xs">
       <label class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Server</span>
+        <span class="joko-label mb-1 block">Server</span>
         <select
-          class="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-200"
+          class="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-900 transition-colors focus:border-lime-500 disabled:opacity-60"
           bind:value={selected}
           disabled={connected}
         >
@@ -128,9 +136,9 @@
       </label>
       <div class="grid grid-cols-2 gap-2">
         <label class="block">
-          <span class="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Codec</span>
+          <span class="joko-label mb-1 block">Codec</span>
           <select
-            class="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-200"
+            class="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-900 transition-colors focus:border-lime-500"
             bind:value={$codec}
             onchange={onCodecChange}
           >
@@ -139,9 +147,9 @@
           </select>
         </label>
         <label class="block">
-          <span class="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Bitrate</span>
+          <span class="joko-label mb-1 block">Bitrate</span>
           <select
-            class="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-200"
+            class="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-900 transition-colors focus:border-lime-500"
             bind:value={$bitrate}
             onchange={onBitrateChange}
           >
@@ -156,8 +164,8 @@
       <button
         class="flex-1 rounded-lg text-sm font-bold uppercase tracking-wider transition-all
           {connected
-            ? 'bg-red-600 text-white shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-900 active:scale-[0.98]'
-            : 'bg-lime-600 text-white shadow-md hover:bg-lime-700 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:ring-offset-2 focus:ring-offset-gray-900 active:scale-[0.98]'}"
+            ? 'bg-red-600 text-white shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-white active:scale-[0.98]'
+            : 'bg-lime-600 text-white shadow-md hover:bg-lime-700 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:ring-offset-2 focus:ring-offset-white active:scale-[0.98]'}"
         onclick={toggle}
         disabled={busy}
       >
@@ -167,13 +175,13 @@
         {#if connected}
           {$codec.toUpperCase()} · {$bitrate} kbps
         {:else if $streamStatus.state === 'error'}
-          <span class="text-red-400">{$streamStatus.message ?? 'error'}</span>
+          <span class="text-red-600">{$streamStatus.message ?? 'error'}</span>
         {:else}
           idle
         {/if}
       </div>
       {#if connected}
-        <div class="mt-1 text-[10px] tabular-nums text-lime-400">{statsLine}</div>
+        <div class="mt-1 text-[10px] tabular-nums text-lime-600">{statsLine}</div>
       {/if}
     </div>
   </div>
@@ -181,17 +189,17 @@
   <!-- Stream title (songtitle): Ultravox sends it in-band (0x3902); Icecast uses
        the /admin/metadata endpoint. Both reuse the source/DJ creds — no separate
        admin password. -->
-  <div class="mt-3 border-t border-gray-700 pt-3">
-    <span class="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Stream title</span>
+  <div class="mt-3 border-t border-gray-200 pt-3">
+    <span class="joko-label mb-1 block">Stream title</span>
     <div class="flex gap-2">
       <input
-        class="min-w-0 flex-1 rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-xs text-gray-200"
+        class="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-900 transition-colors placeholder:text-gray-400 focus:border-lime-500"
         placeholder={$streamTitle || 'song / show name'}
         bind:value={titleDraft}
         onkeydown={(e) => e.key === 'Enter' && sendTitle()}
       />
       <button
-        class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600"
+        class="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white shadow-md transition-colors hover:bg-gray-800 disabled:opacity-40"
         onclick={sendTitle}
         disabled={!connected || metaStatus === 'sending'}
       >
@@ -199,9 +207,9 @@
       </button>
     </div>
     {#if metaStatus === 'ok'}
-      <div class="mt-1 text-[10px] text-lime-400">✓ Title sent to server</div>
+      <div class="mt-1 text-[10px] text-lime-600">✓ Title sent to server</div>
     {:else if metaStatus === 'err'}
-      <div class="mt-1 text-[10px] text-red-400">✕ Update failed</div>
+      <div class="mt-1 text-[10px] text-red-600">✕ Update failed</div>
     {/if}
   </div>
 </div>

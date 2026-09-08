@@ -1,5 +1,6 @@
 <script lang="ts">
   import { nowPlaying, playing, position, monitorFileVolume, errorMsg } from '../stores';
+  import { notify } from '../stores';
   import { prev, next, play, pause, seek, setMonitorFileVolume } from '../api';
 
   let scrubbing = $state(false);
@@ -33,15 +34,26 @@
     if (!scrubbing) return;
     scrubbing = false;
     seek(scrubPct / 100);
+    notify('info', 'Seek', `Jumped to ${fmt((scrubPct / 100) * $position.total_secs)}`);
   }
   function toggle() {
     if ($playing) {
       pause();
       playing.set(false);
+      notify('info', 'Paused', $nowPlaying?.title);
     } else {
       play();
       playing.set(true);
+      notify('success', 'Playing', $nowPlaying?.title);
     }
+  }
+  function onPrev() {
+    prev();
+    notify('info', 'Previous track');
+  }
+  function onNext() {
+    next();
+    notify('info', 'Next track');
   }
 
   let volTimer: ReturnType<typeof setTimeout> | undefined;
@@ -55,10 +67,10 @@
   }
 </script>
 
-<header class="border-b border-gray-700 px-4 py-3">
+<header class="border-b border-gray-200 bg-white px-4 py-3">
   <div class="flex items-center gap-3">
     <div
-      class="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-gradient-to-br from-lime-600 to-lime-600 text-lg text-white shadow"
+      class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-lime-400 to-lime-600 text-lg text-white shadow-md"
     >
       ♪
     </div>
@@ -68,17 +80,23 @@
       </div>
       <div class="truncate text-xs opacity-80">{$nowPlaying?.artist || '—'}</div>
     </div>
-    <button class="rounded p-2 text-gray-300 hover:bg-gray-800" onclick={() => prev()} aria-label="Previous"
+    <button
+      class="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+      onclick={onPrev}
+      aria-label="Previous"
       >⏮</button
     >
     <button
-      class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-900 hover:bg-white"
+      class="flex h-10 w-10 items-center justify-center rounded-full bg-lime-600 text-white shadow-md transition-all hover:bg-lime-700 active:scale-95 focus:outline-none focus:ring-2 focus:ring-lime-500 focus:ring-offset-2"
       onclick={toggle}
       aria-label="{$playing ? 'Pause' : 'Play'}"
     >
       {$playing ? '⏸' : '▶'}
     </button>
-    <button class="rounded p-2 text-gray-300 hover:bg-gray-800" onclick={() => next()} aria-label="Next"
+    <button
+      class="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+      onclick={onNext}
+      aria-label="Next"
       >⏭</button
     >
   </div>
@@ -87,7 +105,7 @@
     <span class="w-8 text-right">{fmt(elapsed)}</span>
     <div
       bind:this={trackEl}
-      class="group relative h-1.5 flex-1 cursor-pointer rounded-full bg-gray-800"
+      class="group relative h-1.5 flex-1 cursor-pointer rounded-full bg-gray-200"
       onpointerdown={down}
       onpointermove={move}
       onpointerup={up}
@@ -100,11 +118,11 @@
       aria-valuenow={pct}
     >
       <div
-        class="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-lime-600 to-lime-400"
+        class="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-lime-500 to-lime-600"
         style="width: {pct}%"
       ></div>
       <div
-        class="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow ring-2 ring-lime-400 transition-transform group-hover:scale-110"
+        class="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow ring-2 ring-lime-500 transition-transform group-hover:scale-110"
         style="left: {pct}%"
       ></div>
     </div>
@@ -112,7 +130,7 @@
   </div>
 
   <div class="mt-2 flex items-center gap-2">
-    <span class="text-[10px] uppercase tracking-wider text-gray-500">File vol</span>
+    <span class="joko-label">File vol</span>
     <input
       type="range"
       min="0"
@@ -120,17 +138,9 @@
       step="1"
       value={$monitorFileVolume}
       oninput={onFileVolume}
-      class="streamy-range flex-1"
+      class="flex-1 cursor-pointer"
       aria-label="Local file volume"
     />
     <span class="w-10 text-right text-[10px] tabular-nums text-gray-500">{$monitorFileVolume}%</span>
   </div>
 </header>
-
-<style>
-  .streamy-range {
-    accent-color: #10b981;
-    height: 1.25rem;
-    cursor: pointer;
-  }
-</style>

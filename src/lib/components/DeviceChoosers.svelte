@@ -1,5 +1,6 @@
 <script lang="ts">
   import { inputDevices, outputDevices, selectedInput, selectedOutput, volume, errorMsg } from '../stores';
+  import { notify } from '../stores';
   import { setInputDevice, setOutputDevice, setVolume } from '../api';
 
   async function onInput(e: Event) {
@@ -7,6 +8,7 @@
     selectedInput.set(name);
     try {
       await setInputDevice(name);
+      notify('success', 'Microphone set', name);
     } catch (e) {
       errorMsg.set(String(e));
     }
@@ -18,6 +20,7 @@
     selectedOutput.set(v);
     try {
       await setOutputDevice(name);
+      notify('success', 'Output set', name ?? 'System default');
     } catch (e) {
       errorMsg.set(String(e));
     }
@@ -40,9 +43,9 @@
 
 <div class="space-y-3 text-xs">
   <label class="block">
-    <span class="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Microphone</span>
+    <span class="joko-label mb-1 block">Microphone</span>
     <select
-      class="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-200"
+      class="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-900 transition-colors focus:border-lime-500"
       value={$selectedInput}
       onchange={onInput}
     >
@@ -50,9 +53,9 @@
     </select>
   </label>
   <label class="block">
-    <span class="mb-1 block text-[10px] uppercase tracking-wider text-gray-500">Output</span>
+    <span class="joko-label mb-1 block">Output</span>
     <select
-      class="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-200"
+      class="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-900 transition-colors focus:border-lime-500"
       value={$selectedOutput}
       onchange={onOutput}
     >
@@ -61,9 +64,9 @@
     </select>
   </label>
   <label class="block">
-    <span class="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider text-gray-500">
+    <span class="joko-label mb-1 flex items-center justify-between">
       <span>Volume</span>
-      <span class="tabular-nums text-gray-300">{$volume}%</span>
+      <span class="tabular-nums text-gray-700">{$volume}%</span>
     </span>
     <input
       type="range"
@@ -72,16 +75,8 @@
       step="1"
       value={$volume}
       oninput={onVolume}
-      class="streamy-range w-full"
+      class="w-full cursor-pointer"
       aria-label="Master volume"
     />
   </label>
 </div>
-
-<style>
-  .streamy-range {
-    accent-color: #10b981;
-    height: 1.25rem;
-    cursor: pointer;
-  }
-</style>

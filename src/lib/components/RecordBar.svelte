@@ -1,5 +1,6 @@
 <script lang="ts">
   import { recording, recFormat, recordingPath, recStartedAt, errorMsg } from '../stores';
+  import { notify } from '../stores';
   import { startRecording, stopRecording } from '../api';
 
   let elapsed = $state(0);
@@ -22,6 +23,7 @@
     if ($recording) {
       try {
         await stopRecording();
+        notify('info', 'Recording stopped', $recordingPath ?? undefined);
       } catch (e) {
         errorMsg.set(String(e));
       }
@@ -29,8 +31,10 @@
     }
     try {
       await startRecording($recFormat);
+      notify('success', 'Recording started', $recFormat.toUpperCase());
     } catch (e) {
       errorMsg.set(String(e));
+      notify('error', 'Record failed', String(e));
     }
   }
 
@@ -46,7 +50,7 @@
 <div class="space-y-2">
   <div class="flex items-center gap-2 text-xs">
     <select
-      class="rounded bg-gray-800 px-2 py-1 text-gray-200"
+      class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-900 focus:border-lime-500"
       bind:value={$recFormat}
       disabled={$recording}
     >
@@ -54,15 +58,15 @@
       <option value="wav">WAV</option>
     </select>
     <button
-      class="rounded px-3 py-1 font-medium {$recording
-        ? 'bg-gray-700 text-white hover:bg-gray-600'
-        : 'bg-red-700 text-white hover:bg-red-600'}"
+      class="rounded-lg px-3 py-1.5 font-semibold shadow-md transition-all duration-200 active:scale-95 {$recording
+        ? 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+        : 'bg-red-600 text-white hover:bg-red-700'}"
       onclick={toggle}
     >
       {label}
     </button>
     {#if $recording}
-      <span class="ml-auto font-mono text-red-400">{fmt(elapsed)}</span>
+      <span class="ml-auto font-mono text-red-600">{fmt(elapsed)}</span>
     {/if}
   </div>
   {#if $recording && $recordingPath}

@@ -75,3 +75,22 @@ export interface Position {
   total_secs: number;
 }
 export const position = writable<Position>({ pct: 0, elapsed_secs: 0, total_secs: 0 });
+
+// Toast notifications (Joko UI toast style) — press feedback for actions.
+export interface Toast {
+  id: number;
+  kind: 'success' | 'error' | 'info';
+  title: string;
+  detail?: string;
+}
+export const toasts = writable<Toast[]>([]);
+
+let toastSeq = 0;
+export function notify(kind: Toast['kind'], title: string, detail?: string) {
+  const id = ++toastSeq;
+  toasts.update((t) => [...t.slice(-2), { id, kind, title, detail }]); // max 3
+  setTimeout(() => toasts.update((t) => t.filter((x) => x.id !== id)), 3200);
+}
+export function dismissToast(id: number) {
+  toasts.update((t) => t.filter((x) => x.id !== id));
+}

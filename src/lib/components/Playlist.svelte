@@ -1,5 +1,6 @@
 <script lang="ts">
   import { playlist, currentIndex, playing } from '../stores';
+  import { notify } from '../stores';
   import { playIndex, addToPlaylist, openAudioFiles } from '../api';
 
   async function addFiles() {
@@ -7,6 +8,7 @@
     if (paths.length === 0) return;
     const tracks = await addToPlaylist(paths);
     playlist.set(tracks);
+    notify('success', 'Added to playlist', `${paths.length} file${paths.length === 1 ? '' : 's'}`);
   }
 
   function select(i: number) {
@@ -24,13 +26,13 @@
 
 <div class="flex flex-col gap-3 p-4">
   <!-- Header -->
-  <div class="retro-chrome flex items-center justify-between rounded-lg px-4 py-3">
+  <div class="joko-card flex items-center justify-between rounded-xl px-4 py-3">
     <div>
-      <div class="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Playlist</div>
+      <div class="joko-label">Playlist</div>
       <div class="text-[10px] text-gray-500">{$playlist.length} {$playlist.length === 1 ? 'track' : 'tracks'}</div>
     </div>
     <button
-      class="rounded-lg bg-gradient-to-b from-lime-600 to-lime-700 px-3 py-1.5 text-xs font-semibold text-white hover:from-lime-300 hover:to-lime-600 active:scale-95"
+      class="rounded-lg bg-lime-600 px-3 py-1.5 text-xs font-semibold text-white shadow-md transition-all duration-200 hover:bg-lime-700 active:scale-95"
       onclick={addFiles}
     >
       + Add files
@@ -38,11 +40,11 @@
   </div>
 
   <!-- Tracks -->
-  <div class="retro-chrome overflow-hidden rounded-lg">
+  <div class="joko-card overflow-hidden rounded-xl">
     {#each $playlist as track, i (track.path)}
       <button
-        class="group flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-gray-800/60 {$currentIndex === i
-          ? 'bg-gray-800/80'
+        class="group flex w-full items-center gap-3 border-b border-gray-100 px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-lime-50/60 {$currentIndex === i
+          ? 'bg-lime-50'
           : ''}"
         onclick={() => select(i)}
       >
@@ -51,14 +53,14 @@
           {#if $currentIndex === i && $playing}
             <span class="now-playing" aria-label="playing"><i></i><i></i><i></i></span>
           {:else}
-            <span class="text-xs tabular-nums text-gray-500 group-hover:text-gray-400">{i + 1}</span>
+            <span class="text-xs tabular-nums text-gray-400 group-hover:text-gray-600">{i + 1}</span>
           {/if}
         </span>
         <span class="min-w-0 flex-1">
-          <span class="block truncate text-sm {$currentIndex === i ? 'text-lime-300' : 'text-gray-200'}">{track.title}</span>
+          <span class="block truncate text-sm {$currentIndex === i ? 'font-medium text-lime-700' : 'text-gray-900'}">{track.title}</span>
           {#if track.artist}<span class="block truncate text-[11px] text-gray-500">{track.artist}</span>{/if}
         </span>
-        <span class="shrink-0 text-xs tabular-nums text-gray-500">{fmt(track.duration_secs)}</span>
+        <span class="shrink-0 text-xs tabular-nums text-gray-400">{fmt(track.duration_secs)}</span>
       </button>
     {:else}
       <div class="flex flex-col items-center gap-3 px-4 py-12 text-center">
@@ -66,7 +68,7 @@
         <div class="text-sm text-gray-500">No tracks yet</div>
         <div class="text-[11px] text-gray-500">Drag audio files onto the window, or</div>
         <button
-          class="rounded-lg bg-gray-800 px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700"
+          class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm transition-colors hover:bg-gray-200"
           onclick={addFiles}>Add files</button
         >
       </div>
@@ -83,7 +85,7 @@
   }
   .now-playing i {
     width: 3px;
-    background: #22d3ee;
+    background: #65a30d; /* lime-600 */
     border-radius: 1px;
     animation: np-bounce 0.9s ease-in-out infinite;
   }

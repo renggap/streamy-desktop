@@ -1,8 +1,16 @@
 @import 'tailwindcss';
 
+/*
+ * Joko UI (jokoui.web.id) light theme.
+ * - Page bg: warm gray-100 (#f3f4f6) — NOT shiny white.
+ * - Cards: white, rounded-xl, border gray-200, shadow (Joko card recipe).
+ * - Primary: lime-600 buttons/toggles; secondary: gray-100; danger: red.
+ * - Text: gray-900 primary, gray-500 secondary.
+ */
+
 :root {
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
@@ -17,46 +25,71 @@ body,
   flex-direction: column;
 }
 
-/*
- * Joko UI (jokoui.web.id) dark-mode token mapping, applied to the existing
- * Tailwind utility usage. Joko UI dark surfaces: gray-900 base, gray-800
- * cards, gray-700 borders, gray-400 secondary text. Accent: lime-500/600
- * (primary buttons, toggles, focus rings); indigo-600 for selected nav.
- * Old zinc/emerald "retro" palette kept only inside .lcd (now-playing readout).
- */
 html,
 body {
-  background: #111827; /* gray-900 */
+  background: #f3f4f6; /* gray-100 — soft light, not white */
 }
 
-/* Panel = Joko UI card surface: gray-800 on gray-900, gray-700 border. */
-.retro-chrome {
-  background: #1f2937; /* gray-800 */
-  border: 1px solid #374151; /* gray-700 */
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+/* Joko UI card: white surface, gray-200 border, soft shadow. */
+.joko-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb; /* gray-200 */
+  border-radius: 0.75rem; /* rounded-xl */
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
-/* LCD readout keeps the broadcast-desk personality; lime glow to match accent. */
+/* Joko UI section label — small uppercase gray-500 with wide tracking. */
+.joko-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #6b7280; /* gray-500 */
+}
+
+/* LCD readout keeps the broadcast-desk personality on light theme. */
 .lcd {
   font-family: 'DejaVu Sans Mono', 'Consolas', ui-monospace, monospace;
-  background: #030712; /* gray-950 */
-  border: 1px solid #374151; /* gray-700 */
+  background: #111827; /* gray-900 */
+  border: 1px solid #1f2937; /* gray-800 */
   border-radius: 0.5rem;
-  padding: 4px 8px;
-  color: #bef264; /* lime-300 */
-  text-shadow: 0 0 6px rgba(163, 230, 53, 0.45);
+  padding: 4px 10px;
+  color: #65a30d; /* lime-600 */
+  text-shadow: 0 0 6px rgba(101, 163, 13, 0.5);
 }
 
-/* Range thumbs + toggles use the lime accent like Joko UI toggles. */
+/* Range thumbs + checkboxes use the lime accent like Joko UI. */
 input[type='range'] {
-  accent-color: #84cc16; /* lime-600 */
+  accent-color: #65a30d; /* lime-600 */
 }
 
-/* Focus rings on inputs/buttons: lime like Joko UI focus:ring-lime-500. */
+/* Focus rings: lime like Joko UI focus:ring-lime-500. */
 input:focus-visible,
 select:focus-visible,
 button:focus-visible {
-  outline: 2px solid #84cc16; /* lime-600 */
+  outline: 2px solid #84cc16; /* lime-500 */
   outline-offset: 1px;
+}
+
+/* Joko UI toast entrance/exit. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.toast-anim {
+  animation: toast-in 0.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-anim {
+    animation: none;
+  }
 }
