@@ -17,12 +17,12 @@ use crate::engine::mixer::SourceMode;
 use crate::events;
 use crate::playlist::model::{Playlist, Track};
 use crate::profile::store::{ConnectionProfile, ProfileStore};
-use crate::update;
 use crate::record::{RecFormat, RecorderHandle, RecordingStatus};
 use crate::settings::{Settings, SettingsStore};
 use crate::stream::broadcast::{self, BroadcastHandle, StreamConfig, StreamStatus};
 use crate::stream::icy::IcySourceConfig;
 use crate::stream::ultravox::UltravoxConfig;
+use crate::update;
 
 /// Read (title, artist, duration_secs) from tags; fall back to filename + 0.
 /// Skips cover-art parsing (we don't display it) — the expensive part on files

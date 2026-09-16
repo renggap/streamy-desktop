@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 
 /// Cloudflare Worker proxy (update-worker/) holds the GitHub PAT
 /// server-side so the private repo's release feed needs no app-side auth.
-pub const UPDATE_URL: &str =
-    "https://streamy-update-proxy.renggap.workers.dev/latest";
+pub const UPDATE_URL: &str = "https://streamy-update-proxy.renggap.workers.dev/latest";
 
 #[derive(Serialize, Clone, Deserialize)]
 pub struct UpdateInfo {
