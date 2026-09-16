@@ -21,7 +21,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: 24
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -94,6 +94,8 @@ jobs:
       - name: Create release with installers
         env:
           GH_TOKEN: ${{ github.token }}
+          # No checkout in this job: tell gh which repo to target.
+          GH_REPO: ${{ github.repository }}
         run: |
           TAG="${GITHUB_REF_NAME}"
           gh release create "$TAG" --title "Streamy Desktop ${TAG#v}" \
