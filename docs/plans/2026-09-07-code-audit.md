@@ -358,3 +358,26 @@ teardown. Proof: release lib exe 0/100 consecutive runs under Wine
 hardening in ICY headers, encoder-rate-fallback matching (no user-visible
 defect on supported rates), repeat/shuffle + AAC-record + per-deck-EQ design
 drift. Each recorded in README "Notes / known limits" for the next pass.
+
+## 2026-09-16: vite dev-server breakage (pre-existing, out of scope)
+
+`npm run dev` fails on every Svelte component with
+`Internal server error: Invalid declaration: \`<props list>\``
+from `@tailwindcss/vite` — the Tailwind v4 plugin tries to compile
+Svelte 5's compiled `$props()` destructure as CSS when processing
+virtual `*.svelte?svelte&type=style&lang.css` modules. A/B-proven
+pre-existing: identical error on 54756eb (commit before the
+mic-fix branch) in a clean worktree, same error on 8ec8363.
+Production `npm run build` (what CI ships) is unaffected; only the
+dev server is broken. Fix belongs upstream or as a
+plugin/pinia-style ordering change; deliberately not touched in
+audit-2026-09-08.
+
+E2E validation of audit-2026-09-08 on Xvfb (native Linux build,
+`vite preview` of dist on the baked devUrl port): window 768px on
+1280px = exact 60% target; NOISE SUPPRESSION checkbox renders in
+STREAM SETTINGS; toggle → toast "Noise suppression on / RNNoise
+cleaning the mic" → `settings.json` `mic_denoise: true`; relaunch
+→ engine log `set_mic_denoise -> true`, checkbox re-renders checked
+(lime accent pixels present). Remaining gap unchanged: human-ear
+check on physical Windows audio hardware.
