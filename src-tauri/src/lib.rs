@@ -36,6 +36,7 @@ pub fn run() {
             commands::set_crossfade,
             commands::set_eq,
             commands::set_duck,
+            commands::set_mic_denoise,
             commands::list_input_devices,
             commands::list_output_devices,
             commands::set_input_device,
@@ -102,15 +103,21 @@ pub fn run() {
             // Restore the master volume (defaults to unity / 100%).
             let vol = app.state::<settings::SettingsStore>().get().volume;
             let _ = app.state::<engine::engine::AudioEngine>().set_volume(vol);
-            // Default launch width = 30% of the primary monitor (user request).
-            // Logical units so HiDPI stays proportionally correct.
+            // Restore mic noise suppression (RNNoise, broadcast-only path).
+            if app.state::<settings::SettingsStore>().get().mic_denoise {
+                let _ = app
+                    .state::<engine::engine::AudioEngine>()
+                    .set_denoise(true);
+            }
+            // Default launch width = 60% of the primary monitor (2x the old
+            // 30%; user request). Logical units so HiDPI stays proportional.
             {
                 use tauri::Manager;
                 if let Some(w) = app.get_webview_window("main") {
                     if let Ok(Some(monitor)) = w.current_monitor() {
                         let size = monitor.size();
                         let scale = w.scale_factor().unwrap_or(1.0);
-                        let logical_w = size.width as f64 / scale * 0.30;
+                        let logical_w = size.width as f64 / scale * 0.60;
                         if let Ok(cur) = w.inner_size() {
                             let logical_h = cur.to_logical::<f64>(scale).height;
                             let _ = w.set_size(tauri::LogicalSize::new(logical_w, logical_h));

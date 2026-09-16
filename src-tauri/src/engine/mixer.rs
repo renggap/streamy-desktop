@@ -43,38 +43,38 @@ pub enum SourceMode {
     Both,
 }
 
-/// Per-source sends into the two buses. Each of (decks, mic) × (broadcast, monitor).
+/// Per-source sends into the two buses: (decks, mic) → broadcast, decks → monitor.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sends {
     pub decks_broadcast: f32,
     pub mic_broadcast: f32,
     pub decks_monitor: f32,
-    pub mic_monitor: f32,
 }
 
 /// Map a SourceMode to bus sends:
-/// - Both: everything wide open.
-/// - File: decks to both buses; mic to monitor only (cue, not on air).
-/// - Mic:  mic to both buses; decks to monitor only.
+/// - Both: decks + mic on air; decks on monitor.
+/// - File: decks on air; mic nowhere (music-only mode).
+/// - Mic:  mic on air; decks on monitor only.
+///
+/// The mic NEVER routes to the monitor bus in any mode: this app is
+/// broadcast-only, and a mic on the laptop speakers is feedback/echo
+/// (user-reported bug). The DJ still sees the mic level on the input meter.
 pub fn sends_for(mode: SourceMode) -> Sends {
     match mode {
         SourceMode::Both => Sends {
             decks_broadcast: 1.0,
             mic_broadcast: 1.0,
             decks_monitor: 1.0,
-            mic_monitor: 1.0,
         },
         SourceMode::File => Sends {
             decks_broadcast: 1.0,
             mic_broadcast: 0.0,
             decks_monitor: 1.0,
-            mic_monitor: 1.0,
         },
         SourceMode::Mic => Sends {
             decks_broadcast: 0.0,
             mic_broadcast: 1.0,
             decks_monitor: 1.0,
-            mic_monitor: 1.0,
         },
     }
 }
@@ -106,8 +106,6 @@ mod tests {
         let s = sends_for(SourceMode::File);
         assert_eq!(s.decks_broadcast, 1.0);
         assert_eq!(s.mic_broadcast, 0.0);
-        // mic still on monitor in File mode:
-        assert_eq!(s.mic_monitor, 1.0);
     }
 
     #[test]
@@ -124,7 +122,18 @@ mod tests {
         assert_eq!(s.decks_broadcast, 1.0);
         assert_eq!(s.mic_broadcast, 1.0);
         assert_eq!(s.decks_monitor, 1.0);
-        assert_eq!(s.mic_monitor, 1.0);
+    }
+
+    #[test]
+    fn mic_never_reaches_monitor_in_any_mode() {
+        // Broadcast-only app: the mic must never play out of the local
+        // monitor/speakers (feedback). There is no mic monitor send at all.
+        for mode in [SourceMode::File, SourceMode::Mic, SourceMode::Both] {
+            let _ = mode; // Sends has no mic_monitor field — compile-level
+                          // guarantee; this test pins the struct shape.
+        }
+        let s = sends_for(SourceMode::Mic);
+        assert_eq!(s.decks_monitor, 1.0, "decks still cue on monitor");
     }
 
     // --- P5.2 equal-power crossfade ---

@@ -22,6 +22,9 @@ pub struct Settings {
     /// unaffected. Persisted so the DJ's listening level survives restarts.
     #[serde(default = "default_volume")]
     pub monitor_file_volume: f32,
+    /// Mic noise suppression (RNNoise) for the broadcast voice path.
+    #[serde(default)]
+    pub mic_denoise: bool,
 }
 
 fn default_volume() -> f32 {
@@ -36,6 +39,7 @@ impl Default for Settings {
             recording_dir: None,
             volume: default_volume(),
             monitor_file_volume: default_volume(),
+            mic_denoise: false,
         }
     }
 }
@@ -106,6 +110,13 @@ impl SettingsStore {
         self.persist(&g)
     }
 
+    /// Mic noise suppression on/off (persisted).
+    pub fn set_mic_denoise(&self, on: bool) -> Result<(), String> {
+        let mut g = self.inner.lock().map_err(|e| e.to_string())?;
+        g.mic_denoise = on;
+        self.persist(&g)
+    }
+
     fn persist(&self, s: &Settings) -> Result<(), String> {
         crate::diag::write_atomic(
             &self.path,
@@ -161,5 +172,12 @@ mod tests {
             "missing key must default to unity"
         );
         assert_eq!(s.volume, 0.8);
+    }
+
+    #[test]
+    fn old_settings_json_without_mic_denoise_defaults_off() {
+        let json = r#"{"volume":1.0}"#;
+        let s: Settings = serde_json::from_str(json).expect("parse");
+        assert!(!s.mic_denoise, "denoise must default off for existing users");
     }
 }

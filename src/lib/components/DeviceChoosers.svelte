@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { inputDevices, outputDevices, selectedInput, selectedOutput, volume, errorMsg } from '../stores';
+  import { inputDevices, outputDevices, selectedInput, selectedOutput, volume, errorMsg, micDenoise } from '../stores';
   import { notify } from '../stores';
-  import { setInputDevice, setOutputDevice, setVolume } from '../api';
+  import { setInputDevice, setOutputDevice, setVolume, setMicDenoise } from '../api';
 
   async function onInput(e: Event) {
     const name = (e.currentTarget as HTMLSelectElement).value;
@@ -9,6 +9,19 @@
     try {
       await setInputDevice(name);
       notify('success', 'Microphone set', name);
+    } catch (e) {
+      errorMsg.set(String(e));
+    }
+  }
+
+  // Mic noise suppression: broadcast-only (RNNoise). Never touches the
+  // monitor path (the mic never plays locally anyway).
+  async function onDenoise(e: Event) {
+    const on = (e.currentTarget as HTMLInputElement).checked;
+    micDenoise.set(on);
+    try {
+      await setMicDenoise(on);
+      notify('success', on ? 'Noise suppression on' : 'Noise suppression off', on ? 'RNNoise cleaning the mic before broadcast' : undefined);
     } catch (e) {
       errorMsg.set(String(e));
     }
@@ -51,6 +64,16 @@
     >
       {#each $inputDevices as d (d.id)}<option value={d.id}>{d.name}</option>{/each}
     </select>
+  </label>
+  <label class="flex cursor-pointer items-center justify-between gap-2">
+    <span class="joko-label">Noise suppression</span>
+    <input
+      type="checkbox"
+      class="h-4 w-4 accent-lime-500"
+      checked={$micDenoise}
+      onchange={onDenoise}
+      aria-label="Mic noise suppression for broadcast"
+    />
   </label>
   <label class="block">
     <span class="joko-label mb-1 block">Output</span>

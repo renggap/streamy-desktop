@@ -60,6 +60,7 @@ export const getSettings = () =>
     recording_dir: string | null;
     volume: number;
     monitor_file_volume: number;
+    mic_denoise: boolean;
   }>('get_settings');
 export const setSourceMode = (mode: SourceMode) =>
   invoke<void>('set_source_mode', { mode });
@@ -69,6 +70,8 @@ export const setEq = (low_db: number, mid_db: number, high_db: number) =>
   invoke<void>('set_eq', { lowDb: low_db, midDb: mid_db, highDb: high_db });
 export const setDuck = (enabled: boolean, threshold: number, depth_db: number) =>
   invoke<void>('set_duck', { enabled, threshold, depthDb: depth_db });
+export const setMicDenoise = (enabled: boolean) =>
+  invoke<void>('set_mic_denoise', { enabled });
 
 // --- P2 streaming ---
 

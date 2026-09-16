@@ -1,5 +1,6 @@
 pub mod deck;
 pub mod decoder;
+pub mod denoise;
 pub mod device;
 #[allow(clippy::module_inception)]
 pub mod engine;

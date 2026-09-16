@@ -36,6 +36,8 @@ export const eqHigh = writable(0);
 export const duckEnabled = writable(false);
 export const duckThreshold = writable(0.15);
 export const duckDepth = writable(12);
+/** Mic noise suppression (RNNoise) for the broadcast voice path. */
+export const micDenoise = writable(false);
 
 export const profiles = writable<ConnectionProfile[]>([]);
 export const bitrate = writable(24); // AAC talk-radio sweet spot (user default)

@@ -9,6 +9,7 @@ use cpal::{BufferSize, SampleRate, Stream, StreamConfig};
 use tauri::{AppHandle, Emitter};
 
 use super::deck::Deck;
+use super::denoise::MicDenoiser;
 use super::eq::Eq3Band;
 use super::meter::{Meter, Position};
 use super::mic::MicInput;
@@ -21,6 +22,8 @@ const FALLBACK_RATE: u32 = 44100;
 const CROSSFADE_SECS: f32 = 0.4;
 /// Mic-duck envelope smoothing factor per frame.
 const DUCK_SMOOTH: f32 = 0.02;
+/// Denoiser wet/dry ramp: ~20ms at 48kHz for a click-free toggle.
+const DENOISE_RAMP: f32 = 1.0 / (0.02 * 48_000.0);
 
 /// Control messages pushed from the UI thread, drained at the top of each
 /// audio callback.
@@ -35,6 +38,7 @@ pub enum Action {
     SetDuck(bool, f32, f32),
     SetVolume(f32),
     SetMonitorFileGain(f32),
+    SetDenoise(bool),
 }
 
 /// Signals to the audio loop: rebuild the stream (e.g. output device lost) or
@@ -102,6 +106,14 @@ struct EngineState {
     /// Cached mic frames for interpolation (last popped pair).
     mic_prev: [f32; 2],
     mic_next: [f32; 2],
+    /// RNNoise denoiser on the mic path (broadcast-only; monitor untouched —
+    /// and the mic never reaches the monitor anyway). Two instances so a
+    /// toggle can crossfade the wet/dry mix instead of hard-switching.
+    denoise: Option<MicDenoiser>,
+    /// 0.0 = dry, 1.0 = fully denoised; ramped per frame on toggle.
+    denoise_mix: f32,
+    /// Target for the wet/dry ramp (denoise_mix eases toward it).
+    denoise_mix_target: f32,
     /// When broadcasting, the callback pushes the broadcast bus into this ring
     /// for the encoder thread to consume. Drop-oldest overflow (design §7):
     /// a slow uplink makes the audience skip forward, not freeze.
@@ -129,6 +141,14 @@ impl EngineState {
     /// handles mono/2ch/Nch expansion per frame.
     fn render_buffer(&mut self, out: &mut [f32], channels: usize) {
         let sends = sends_for(self.source_mode);
+        // Teardown: once the wet/dry ramp reached fully dry, drop the
+        // denoiser (frees the RNN state; toggling on re-creates it fresh).
+        if self.denoise.is_some()
+            && self.denoise_mix_target == 0.0
+            && self.denoise_mix < 1e-4
+        {
+            self.denoise = None;
+        }
         for frame in out.chunks_mut(channels.max(1)) {
             // Two decks -> per-deck EQ -> equal-power crossfade.
             let raw_a = self.deck_a.next_frame();
@@ -174,16 +194,30 @@ impl EngineState {
             self.duck_gain += DUCK_SMOOTH * (target_duck - self.duck_gain);
             let mic_out = [mic_frame[0] * self.duck_gain, mic_frame[1] * self.duck_gain];
 
+            // Noise suppression (RNNoise) on the mic, wet/dry crossfaded so
+            // toggling doesn't click. Mono-processed (voice), duplicated back
+            // to stereo. The meter sees the processed result.
+            let mic_out = if let Some(d) = self.denoise.as_mut() {
+                self.denoise_mix +=
+                    DENOISE_RAMP * (self.denoise_mix_target - self.denoise_mix);
+                let m = d.process(0.5 * (mic_out[0] + mic_out[1]));
+                [
+                    mic_out[0] + (m - mic_out[0]) * self.denoise_mix,
+                    mic_out[1] + (m - mic_out[1]) * self.denoise_mix,
+                ]
+            } else {
+                mic_out
+            };
+
             let mon = mix_bus(
-                &[
-                    [
-                        deck_frame[0] * self.monitor_file_gain,
-                        deck_frame[1] * self.monitor_file_gain,
-                    ],
-                    mic_out,
-                ],
-                &[sends.decks_monitor, sends.mic_monitor],
+                &[[
+                    deck_frame[0] * self.monitor_file_gain,
+                    deck_frame[1] * self.monitor_file_gain,
+                ]],
+                &[sends.decks_monitor],
             );
+            // Broadcast-only app: mic goes to air (never the local monitor —
+            // feedback/echo bug). Its level still feeds the input meter.
             let bcast = mix_bus(
                 &[deck_frame, mic_out],
                 &[sends.decks_broadcast, sends.mic_broadcast],
@@ -252,6 +286,9 @@ impl AudioEngine {
             mic_pos: 0.0,
             mic_prev: [0.0, 0.0],
             mic_next: [0.0, 0.0],
+            denoise: None,
+            denoise_mix: 0.0,
+            denoise_mix_target: 0.0,
             broadcast_tx: None,
             record_tx: None,
         }));
@@ -323,6 +360,11 @@ impl AudioEngine {
     /// Broadcast is unaffected.
     pub fn set_monitor_file_gain(&self, gain: f32) -> Result<(), String> {
         self.push(Action::SetMonitorFileGain(gain.clamp(0.0, 2.0)))
+    }
+    /// Mic noise suppression (RNNoise) on/off. Broadcast-only; the monitor
+    /// never carries the mic anyway.
+    pub fn set_denoise(&self, on: bool) -> Result<(), String> {
+        self.push(Action::SetDenoise(on))
     }
     pub fn set_input_device(&self, name: String) -> Result<(), String> {
         self.mic.set_device(name)
@@ -536,6 +578,18 @@ fn build_output_stream(
                             Action::SetMonitorFileGain(v) => {
                                 s.monitor_file_gain = v.clamp(0.0, 2.0)
                             }
+                            Action::SetDenoise(on) => {
+                                if on {
+                                    // Fresh instance: resets the RNN state so a
+                                    // stale adaptation window doesn't bleed in.
+                                    s.denoise = Some(MicDenoiser::new());
+                                    s.denoise_mix_target = 1.0;
+                                } else {
+                                    // Ramp out in render_buffer; the instance is
+                                    // dropped there once fully dry.
+                                    s.denoise_mix_target = 0.0;
+                                }
+                            }
                         }
                     }
                     // 2. Render the output buffer: per-frame DSP loop.
@@ -619,6 +673,9 @@ mod tests {
             mic_pos: 0.0,
             mic_prev: [0.0, 0.0],
             mic_next: [0.0, 0.0],
+            denoise: None,
+            denoise_mix: 0.0,
+            denoise_mix_target: 0.0,
             broadcast_tx: None,
             record_tx: None,
         };
@@ -658,8 +715,9 @@ mod tests {
     #[test]
     fn mic_resampler_same_rate_is_passthrough_level() {
         // Equal rates: step=1, interp at integer positions -> output frame
-        // equals input frame (DC level preserved exactly).
-        let (mut s, _brx, _rrx) = state_with_rings();
+        // equals input frame (DC level preserved exactly). Read the mic from
+        // the BROADCAST ring (mic no longer reaches the monitor bus).
+        let (mut s, brx, _rrx) = state_with_rings();
         let (mtx, mr) = crate::engine::ring::StereoRing::new(8192);
         for _ in 0..4_096 {
             mtx.push([0.25, -0.25]);
@@ -672,15 +730,15 @@ mod tests {
         s.monitor_file_gain = 0.0; // isolate the mic path from the deck tone
         let mut buf = vec![0.0f32; 1_024 * 2];
         s.render_buffer(&mut buf, 2);
-        // Warmup: frame0 emits the zero window; frame1 interpolates 0->0.25
-        // (t=0 after the first advance, so also ~0). Steady state from
-        // frame2 on: exact DC passthrough.
-        for (i, v) in buf.iter().enumerate().skip(4) {
-            let want = if i % 2 == 0 { 0.25 } else { -0.25 };
-            assert!(
-                (v - want).abs() < 1e-6,
-                "frame {i}: got {v}, want {want} (passthrough corrupted)"
-            );
+        let mut frames = Vec::new();
+        while let Some(f) = brx.pop() {
+            frames.push(f);
+        }
+        // Warmup: first output frame interpolates from zeros. Steady state
+        // from a few frames in: exact DC passthrough on both channels.
+        for (i, f) in frames.iter().enumerate().skip(4) {
+            assert!((f[0] - 0.25).abs() < 1e-6, "frame {i} L: {} != 0.25", f[0]);
+            assert!((f[1] + 0.25).abs() < 1e-6, "frame {i} R: {} != -0.25", f[1]);
         }
     }
 
@@ -688,7 +746,8 @@ mod tests {
     fn mic_resampler_starvation_holds_last_frame_not_garbage() {
         // Ring empties mid-buffer: the resampler must hold the last known
         // frame (unwrap_or(self.mic_next)), never jump to zeros/glitch.
-        let (mut s, _brx, _rrx) = state_with_rings();
+        // Observed on the broadcast ring (mic never reaches the monitor).
+        let (mut s, brx, _rrx) = state_with_rings();
         let (mtx, mr) = crate::engine::ring::StereoRing::new(8192);
         mtx.push([0.7, 0.7]); // one frame only
         s.mic_cons = mr;
@@ -699,13 +758,90 @@ mod tests {
         s.monitor_file_gain = 0.0;
         let mut buf = vec![0.0f32; 64 * 2];
         s.render_buffer(&mut buf, 2);
-        // Monitor bus gain for Mic mode: after the 2-frame warmup, a starved
-        // mic must HOLD the last frame (no drop to silence, no glitch).
+        let mut frames = Vec::new();
+        while let Some(f) = brx.pop() {
+            frames.push(f);
+        }
+        // After the 2-frame warmup, a starved mic must HOLD the last frame
+        // (no drop to silence, no glitch).
         assert!(
-            buf.iter().skip(4).all(|v| *v > 0.05),
+            frames.iter().skip(4).all(|f| f[0] > 0.05 && f[1] > 0.05),
             "starved mic dropped to silence mid-buffer: {:?}",
-            &buf[..8]
+            &frames[..8.min(frames.len())]
         );
+    }
+
+    #[test]
+    fn denoise_suppresses_constant_noise_on_broadcast() {
+        // Low-level steady noise into the mic: with RNNoise on, the broadcast
+        // bus must carry less energy than with it off. Mic mode isolates the
+        // mic path; monitor_file_gain=0 kills the deck tone on broadcast.
+        let run = |denoise: bool| -> f32 {
+            let (mut s, brx, _rrx) = state_with_rings();
+            let (mtx, mr) = crate::engine::ring::StereoRing::new(1 << 16);
+            // Band-limited noise-ish buzz: small square-ish signal.
+            for i in 0..48_000 {
+                let v = if (i / 24) % 2 == 0 { 0.02 } else { -0.02 };
+                mtx.push([v, v]);
+            }
+            s.mic_cons = mr;
+            s.mic_rate.store(48_000, Ordering::Relaxed);
+            s.out_rate.store(48_000, Ordering::Relaxed);
+            s.source_mode = SourceMode::Mic;
+            s.volume = 1.0;
+            s.monitor_file_gain = 0.0;
+            if denoise {
+                s.denoise = Some(MicDenoiser::new());
+                s.denoise_mix = 1.0;
+                s.denoise_mix_target = 1.0;
+            }
+            let mut buf = vec![0.0f32; 48_000 * 2];
+            s.render_buffer(&mut buf, 2);
+            let (mut sum, mut n) = (0.0f64, 0u64);
+            while let Some(f) = brx.pop() {
+                sum += (f[0] * f[0] + f[1] * f[1]) as f64;
+                n += 1;
+            }
+            (sum / n.max(1) as f64) as f32
+        };
+        let dry = run(false);
+        let wet = run(true);
+        assert!(dry > 1e-6, "dry path carried no signal: {dry}");
+        assert!(
+            wet < dry * 0.9,
+            "denoiser did not reduce energy: dry={dry}, wet={wet}"
+        );
+    }
+
+    #[test]
+    fn mic_never_reaches_monitor_speakers() {
+        // Broadcast-only app: a loud mic must NEVER appear in the monitor /
+        // laptop speakers (feedback/echo bug). Monitor stays exactly the deck
+        // cue (here silenced via monitor_file_gain=0) while the broadcast
+        // ring carries the mic.
+        let (mut s, brx, _rrx) = state_with_rings();
+        let (mtx, mr) = crate::engine::ring::StereoRing::new(8192);
+        for _ in 0..4_096 {
+            mtx.push([0.9, -0.9]);
+        }
+        s.mic_cons = mr;
+        s.mic_rate.store(44_100, Ordering::Relaxed);
+        s.out_rate.store(44_100, Ordering::Relaxed);
+        s.source_mode = SourceMode::Mic; // loudest possible mic path
+        s.volume = 1.0;
+        s.monitor_file_gain = 0.0; // silence the deck cue on monitor
+        let mut buf = vec![0.0f32; 2_048 * 2];
+        s.render_buffer(&mut buf, 2);
+        assert!(
+            buf.iter().all(|v| *v == 0.0),
+            "mic leaked to monitor/speakers: max={}",
+            buf.iter().fold(0.0f32, |m, v| m.max(v.abs()))
+        );
+        let mut bmax = 0.0f32;
+        while let Some(f) = brx.pop() {
+            bmax = bmax.max(f[0].abs()).max(f[1].abs());
+        }
+        assert!(bmax > 0.5, "mic must still reach the broadcast bus, max={bmax}");
     }
 
     #[test]
@@ -753,7 +889,7 @@ mod tests {
     }
 
     #[test]
-    fn file_mode_mutes_mic_on_broadcast_but_keeps_monitor() {
+    fn file_mode_mutes_mic_on_broadcast() {
         let (mut s, brx, _rrx) = state_with_rings();
         s.source_mode = SourceMode::File;
         // Put a loud frame in the mic ring.

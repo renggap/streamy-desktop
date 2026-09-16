@@ -27,6 +27,7 @@
     recStartedAt,
     wv2Progress,
     streamStats,
+    micDenoise,
   } from './lib/stores';
   import {
     next,
@@ -76,6 +77,7 @@
       if (typeof s.volume === 'number') volume.set(Math.round(s.volume * 100));
       if (typeof s.monitor_file_volume === 'number')
         monitorFileVolume.set(Math.round(s.monitor_file_volume * 100));
+      micDenoise.set(!!s.mic_denoise);
     });
 
     const np = listen<Track>('now_playing', (e) => {

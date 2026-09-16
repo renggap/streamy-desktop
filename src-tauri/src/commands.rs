@@ -218,6 +218,18 @@ pub fn set_duck(
     engine.set_duck(enabled, threshold, depth_db)
 }
 
+/// Mic noise suppression (RNNoise) on/off. Persisted + applied live.
+#[tauri::command]
+pub fn set_mic_denoise(
+    enabled: bool,
+    engine: State<'_, AudioEngine>,
+    settings: State<'_, SettingsStore>,
+) -> Result<(), String> {
+    diag::log(format!("set_mic_denoise -> {enabled}"));
+    settings.set_mic_denoise(enabled)?;
+    engine.set_denoise(enabled)
+}
+
 #[tauri::command]
 pub fn list_input_devices() -> Vec<device::DeviceInfo> {
     device::list_input_devices()
