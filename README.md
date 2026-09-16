@@ -9,8 +9,11 @@ Svelte 5 UI).
 - **Dual decks** with per-deck 3-band EQ, equal-power crossfader, cue-free
   quick mix. MP3/FLAC/WAV decode via Symphonia, resampled to the output
   device rate (linear interpolation).
-- **Live mic** with auto-duck (music RMS drives gain), mic-monitor gain, and
-  rate-matched resampling (a 48 kHz mic into a 44.1 kHz output stays in pitch).
+- **Live mic** with auto-duck (music RMS drives gain), rate-matched
+  resampling (a 48 kHz mic into a 44.1 kHz output stays in pitch), and
+  optional RNNoise suppression (noise cancelling) on the broadcast path.
+  The mic is broadcast-only: it never plays on the local monitor/speakers
+  (no feedback/echo), and its level still shows on the input meter.
 - **Broadcast** MP3 (Shine, fixed-point) or AAC-LC (fdk-aac-encoder) to
   Shoutcast v2 (ICY + ultravox admin) or Icecast (ICY + admin.cgi metadata).
   Auto-reconnect with fresh handshake; drop-oldest tap keeps the encoder
