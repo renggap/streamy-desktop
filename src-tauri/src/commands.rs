@@ -17,6 +17,7 @@ use crate::engine::mixer::SourceMode;
 use crate::events;
 use crate::playlist::model::{Playlist, Track};
 use crate::profile::store::{ConnectionProfile, ProfileStore};
+use crate::update;
 use crate::record::{RecFormat, RecorderHandle, RecordingStatus};
 use crate::settings::{Settings, SettingsStore};
 use crate::stream::broadcast::{self, BroadcastHandle, StreamConfig, StreamStatus};
@@ -850,4 +851,32 @@ pub async fn repair_webview2(app: AppHandle) -> Result<String, String> {
     });
 
     Ok(path)
+}
+
+// --- Update check ---------------------------------------------------------
+
+#[tauri::command]
+pub async fn check_update() -> Result<Option<update::UpdateInfo>, String> {
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    // Fail soft: an offline/failed check must never disturb the DJ.
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let latest = match update::fetch_latest(&client).await {
+        Ok(i) => i,
+        Err(e) => {
+            diag::log(format!("update check: {e}"));
+            return Ok(None);
+        }
+    };
+    if update::is_newer(&latest.version, &current) {
+        diag::log(format!(
+            "update available: {} -> {}",
+            current, latest.version
+        ));
+        Ok(Some(latest))
+    } else {
+        Ok(None)
+    }
 }

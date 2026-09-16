@@ -28,6 +28,7 @@
     wv2Progress,
     streamStats,
     micDenoise,
+    notifySticky,
   } from './lib/stores';
   import {
     next,
@@ -39,7 +40,9 @@
     listProfiles,
     setStreamTitle,
     getSettings,
+    checkUpdate,
   } from './lib/api';
+  import { openUrl } from '@tauri-apps/plugin-opener';
   import type { LevelMeter, Track } from './lib/api';
   import type { Position, RecordingStatus, StreamStatus, StreamStats } from './lib/stores';
   import NowPlaying from './lib/components/NowPlaying.svelte';
@@ -58,6 +61,23 @@
   import Toaster from './lib/components/Toaster.svelte';
 
   onMount(() => {
+    // Update notice: check the proxy once per launch; sticky toast with a
+    // Download button. Failures are silent by design (check_update returns
+    // None on any error).
+    checkUpdate().then((info) => {
+      if (!info) return;
+      notifySticky(
+        'info',
+        `Update available: v${info.version}`,
+        info.notes ?? 'Download the new build from the releases page.',
+        {
+          label: 'Download',
+          run: () => {
+            openUrl(info.url).catch((e) => console.error('open release page:', e));
+          },
+        },
+      );
+    });
     listPlaylist().then((snap) => {
       playlist.set(snap.tracks);
       if (snap.current != null && snap.tracks[snap.current]) {

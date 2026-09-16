@@ -84,6 +84,8 @@ export interface Toast {
   kind: 'success' | 'error' | 'info';
   title: string;
   detail?: string;
+  /** When set, the toast renders an action button (update Download). */
+  action?: { label: string; run: () => void };
 }
 export const toasts = writable<Toast[]>([]);
 
@@ -92,6 +94,17 @@ export function notify(kind: Toast['kind'], title: string, detail?: string) {
   const id = ++toastSeq;
   toasts.update((t) => [...t.slice(-2), { id, kind, title, detail }]); // max 3
   setTimeout(() => toasts.update((t) => t.filter((x) => x.id !== id)), 3200);
+}
+/** Sticky toast: stays until the user dismisses it (update notices). */
+export function notifySticky(
+  kind: Toast['kind'],
+  title: string,
+  detail?: string,
+  action?: Toast['action'],
+): number {
+  const id = ++toastSeq;
+  toasts.update((t) => [...t.slice(-2), { id, kind, title, detail, action }]);
+  return id;
 }
 export function dismissToast(id: number) {
   toasts.update((t) => t.filter((x) => x.id !== id));

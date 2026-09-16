@@ -28,6 +28,14 @@
       <div class="flex-1">
         <p class="text-sm font-medium text-gray-100">{t.title}</p>
         {#if t.detail}<p class="mt-1 text-xs text-gray-400">{t.detail}</p>{/if}
+        {#if t.action}
+          <button
+            class="mt-2 rounded-lg bg-lime-400 px-3 py-1 text-xs font-semibold text-gray-900 transition-colors hover:bg-lime-300"
+            onclick={t.action.run}
+          >
+            {t.action.label}
+          </button>
+        {/if}
       </div>
       <button
         class="shrink-0 text-gray-400 transition-colors hover:text-gray-300"

@@ -131,3 +131,13 @@ export const openFolder = async (): Promise<string | null> => {
   const sel = await open({ directory: true, multiple: false });
   return sel ? (Array.isArray(sel) ? sel[0] : sel) : null;
 };
+
+/** Update notice from the Cloudflare worker proxy (see update-worker/). */
+export interface UpdateInfo {
+  version: string;
+  notes: string | null;
+  url: string;
+}
+
+export const checkUpdate = () =>
+  invoke<UpdateInfo | null>('check_update');

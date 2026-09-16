@@ -8,6 +8,7 @@ pub mod profile;
 pub mod record;
 pub mod settings;
 pub mod stream;
+pub mod update;
 
 use tauri::Manager;
 
@@ -22,6 +23,7 @@ fn ping() -> &'static str {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             ping,
             commands::add_to_playlist,
@@ -37,6 +39,7 @@ pub fn run() {
             commands::set_eq,
             commands::set_duck,
             commands::set_mic_denoise,
+            commands::check_update,
             commands::list_input_devices,
             commands::list_output_devices,
             commands::set_input_device,

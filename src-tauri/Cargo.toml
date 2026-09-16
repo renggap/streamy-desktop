@@ -37,7 +37,8 @@ lofty = "0.22"
 rayon = "1"
 tokio = { version = "1", features = ["rt", "macros", "net", "io-util", "time", "sync"] }
 keyring = "3"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 fdk-aac = { version = "0.8", optional = true }
 crossbeam-queue = "0.3.14"
 nnnoiseless = { version = "0.5", default-features = false }
+tauri-plugin-opener = "2.5.5"
