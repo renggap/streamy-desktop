@@ -43,7 +43,11 @@ impl MicDenoiser {
         if self.in_fill == DenoiseState::FRAME_SIZE {
             self.in_fill = 0;
             self.state.process_frame(&mut self.out_buf, &self.in_buf);
-            self.out_pos = if self.primed { 0 } else { DenoiseState::FRAME_SIZE };
+            self.out_pos = if self.primed {
+                0
+            } else {
+                DenoiseState::FRAME_SIZE
+            };
             self.primed = true;
         }
         if self.out_pos < DenoiseState::FRAME_SIZE {

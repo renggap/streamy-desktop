@@ -178,6 +178,9 @@ mod tests {
     fn old_settings_json_without_mic_denoise_defaults_off() {
         let json = r#"{"volume":1.0}"#;
         let s: Settings = serde_json::from_str(json).expect("parse");
-        assert!(!s.mic_denoise, "denoise must default off for existing users");
+        assert!(
+            !s.mic_denoise,
+            "denoise must default off for existing users"
+        );
     }
 }

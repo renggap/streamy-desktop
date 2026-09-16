@@ -143,10 +143,7 @@ impl EngineState {
         let sends = sends_for(self.source_mode);
         // Teardown: once the wet/dry ramp reached fully dry, drop the
         // denoiser (frees the RNN state; toggling on re-creates it fresh).
-        if self.denoise.is_some()
-            && self.denoise_mix_target == 0.0
-            && self.denoise_mix < 1e-4
-        {
+        if self.denoise.is_some() && self.denoise_mix_target == 0.0 && self.denoise_mix < 1e-4 {
             self.denoise = None;
         }
         for frame in out.chunks_mut(channels.max(1)) {
@@ -198,8 +195,7 @@ impl EngineState {
             // toggling doesn't click. Mono-processed (voice), duplicated back
             // to stereo. The meter sees the processed result.
             let mic_out = if let Some(d) = self.denoise.as_mut() {
-                self.denoise_mix +=
-                    DENOISE_RAMP * (self.denoise_mix_target - self.denoise_mix);
+                self.denoise_mix += DENOISE_RAMP * (self.denoise_mix_target - self.denoise_mix);
                 let m = d.process(0.5 * (mic_out[0] + mic_out[1]));
                 [
                     mic_out[0] + (m - mic_out[0]) * self.denoise_mix,
@@ -841,7 +837,10 @@ mod tests {
         while let Some(f) = brx.pop() {
             bmax = bmax.max(f[0].abs()).max(f[1].abs());
         }
-        assert!(bmax > 0.5, "mic must still reach the broadcast bus, max={bmax}");
+        assert!(
+            bmax > 0.5,
+            "mic must still reach the broadcast bus, max={bmax}"
+        );
     }
 
     #[test]

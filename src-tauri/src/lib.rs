@@ -105,9 +105,7 @@ pub fn run() {
             let _ = app.state::<engine::engine::AudioEngine>().set_volume(vol);
             // Restore mic noise suppression (RNNoise, broadcast-only path).
             if app.state::<settings::SettingsStore>().get().mic_denoise {
-                let _ = app
-                    .state::<engine::engine::AudioEngine>()
-                    .set_denoise(true);
+                let _ = app.state::<engine::engine::AudioEngine>().set_denoise(true);
             }
             // Default launch width = 60% of the primary monitor (2x the old
             // 30%; user request). Logical units so HiDPI stays proportional.
