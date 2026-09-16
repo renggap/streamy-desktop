@@ -1,3 +1,5 @@
 name = "streamy-update-proxy"
 main = "worker.js"
 compatibility_date = "2026-09-01"
+
+preview_urls = false
