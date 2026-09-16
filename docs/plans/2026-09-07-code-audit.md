@@ -381,3 +381,34 @@ cleaning the mic" → `settings.json` `mic_denoise: true`; relaunch
 → engine log `set_mic_denoise -> true`, checkbox re-renders checked
 (lime accent pixels present). Remaining gap unchanged: human-ear
 check on physical Windows audio hardware.
+
+## 2026-09-16: update-notification feature (audit-2026-09-08, 9f6eec6..06a78cb)
+
+Notification-only update system: Cloudflare Worker
+(`streamy-update-proxy.renggap.workers.dev/latest`, code in
+`update-worker/`) holds the GitHub PAT server-side and proxies the
+private repo's `releases/latest` as `{version, notes, url}`, edge-cached
+5 min. App checks once per launch (`check_update`), semver-compares
+against `CARGO_PKG_VERSION`, shows a sticky toast with a Download
+button (tauri-plugin-opener). All failures silent — offline or worker
+outage never disturbs the DJ. No token in binary or settings.
+
+Verification: worker 8/8 branch unit tests (committed as
+`worker.test.mjs`); live edge cases (POST→405, bad path→404,
+no-releases→0.0.0 sentinel which compares not-newer); 119/0 Linux;
+119/0 Wine PE32+ release binaries via cargo xwin; CI success on real
+windows-latest with installers verified by artifact download; full E2E
+with a real v1.5.0 release: worker served it, local 1.4.0 app on Xvfb
+toasted, Download opened the browser at the release URL.
+
+Follow-through on a dispatched CI run caught two release-job bugs
+before any real tag: (a) asset glob `dist-artifact/**/bundle` breaks
+without bash globstar — actual layout is `dist-artifact/bundle/nsis`;
+(b) tag builds stamped `major.minor.run_number`, shipping a 1.5.60
+binary under tag v1.5.0 — now tag builds stamp the tag version so
+updater comparisons stay coherent. Fixed in 06a78cb.
+
+Release procedure (memorized): bump version → commit → tag vX.Y.Z →
+push branch+tag → CI builds + publishes release → worker serves it →
+apps toast on next launch. Prereleases are invisible to
+`releases/latest`; only stable releases trigger the toast.
