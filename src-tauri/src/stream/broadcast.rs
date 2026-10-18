@@ -652,6 +652,59 @@ mod tests {
         }
     }
 
+    /// Live: the actual user requirement — when v1 fails (bad password),
+    /// Auto must fall through to Ultravox 2.1 and connect on the same DNAS.
+    ///   cargo test --lib auto_detect_falls_back_to_v2 -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn auto_detect_falls_back_to_v2() {
+        let mut sc_v1 = match sc_v1_from_env() {
+            Some(c) => c,
+            None => {
+                eprintln!("skip: set STREAMY_V1_HOST/PORT/PASS");
+                return;
+            }
+        };
+        sc_v1.password = "definitely-wrong".into(); // force v1 failure
+        let ultravox = UltravoxConfig {
+            host: sc_v1.host.clone(),
+            port: sc_v1.port,
+            stream_id: 1,
+            password: std::env::var("STREAMY_V1_PASS").unwrap(),
+            user: String::new(),
+            content_type: "audio/mpeg".into(),
+            bitrate_kbps: sc_v1.icy_br,
+            name: "Streamy fallback test".into(),
+            genre: "Test".into(),
+            url: "".into(),
+        };
+        let cfg = StreamConfig::Auto {
+            sc_v1,
+            ultravox,
+            icecast: IcySourceConfig {
+                host: "unreachable.invalid".into(),
+                port: 1,
+                mount: "/stream".into(),
+                user: "x".into(),
+                password: "x".into(),
+                content_type: "audio/mpeg".into(),
+                icy_name: "Streamy".into(),
+                icy_genre: "".into(),
+                icy_url: "".into(),
+                icy_pub: true,
+                icy_br: 128,
+                sample_rate: 44100,
+            },
+        };
+        let src = connect_source(&cfg, 15)
+            .await
+            .expect("v1 failure must fall back to Ultravox");
+        assert!(
+            matches!(src, Source::Ultravox(_)),
+            "auto-detect must fall back to Ultravox when v1 rejects the password"
+        );
+    }
+
     /// Live: Auto-detect against a Liquidsoap harbor must reject the Ultravox
     /// probe and fall back to Icecast, resolving to the Icecast source. Then
     /// exercise audio write + the direct (non-channel) metadata path that

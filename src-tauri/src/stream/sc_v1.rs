@@ -194,6 +194,30 @@ mod tests {
         assert_eq!(status_code("garbage"), None);
     }
 
+    /// Bad password on a DNAS answers "Invalid Password\r\n" with NO blank
+    /// line — the auth reader must surface that as an error (EOF after the
+    /// line), not hang or misparse. Live; creds via env.
+    ///   cargo test --lib sc_v1_bad_password_rejected -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn sc_v1_bad_password_rejected() {
+        let mut cfg = match cfg_from_env() {
+            Some(c) => c,
+            None => {
+                eprintln!("skip: set STREAMY_V1_HOST/PORT/PASS");
+                return;
+            }
+        };
+        cfg.password = "definitely-wrong".into();
+        let err = connect(&cfg)
+            .await
+            .expect_err("bad password must be rejected");
+        assert!(
+            err.contains("closed") || err.to_lowercase().contains("invalid password"),
+            "unexpected error for bad password: {err}"
+        );
+    }
+
     fn cfg_from_env() -> Option<ScV1Config> {
         Some(ScV1Config {
             host: std::env::var("STREAMY_V1_HOST").ok()?,
