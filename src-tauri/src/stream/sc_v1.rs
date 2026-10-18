@@ -185,7 +185,9 @@ mod tests {
         // OK2 + caps block is accepted; password failure maps to a clear error.
         let ok = "OK2\r\nicy-caps:11\r\n\r\n";
         assert!(ok.starts_with("OK2"));
-        assert!("invalid password!".to_lowercase().contains("invalid password"));
+        assert!("invalid password!"
+            .to_lowercase()
+            .contains("invalid password"));
     }
 
     #[test]

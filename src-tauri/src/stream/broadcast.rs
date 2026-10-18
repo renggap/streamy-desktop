@@ -113,9 +113,7 @@ impl Source {
     async fn send_audio(&mut self, mp3: &[u8]) -> Result<(), String> {
         match self {
             Source::Ultravox(s) => ultravox::send_mp3(s, mp3).await,
-            Source::ScV1 { stream, .. } => {
-                stream.write_all(mp3).await.map_err(|e| e.to_string())
-            }
+            Source::ScV1 { stream, .. } => stream.write_all(mp3).await.map_err(|e| e.to_string()),
             Source::Icecast { stream, .. } => {
                 stream.write_all(mp3).await.map_err(|e| e.to_string())
             }
@@ -125,9 +123,7 @@ impl Source {
     async fn send_metadata(&mut self, title: &str) -> Result<(), String> {
         match self {
             Source::Ultravox(s) => ultravox::send_metadata(s, title).await,
-            Source::ScV1 { admin, .. } => {
-                crate::stream::sc_v1::send_metadata(admin, title).await
-            }
+            Source::ScV1 { admin, .. } => crate::stream::sc_v1::send_metadata(admin, title).await,
             Source::Icecast { admin, .. } => crate::stream::icy::send_metadata(admin, title).await,
         }
     }
@@ -615,7 +611,9 @@ mod tests {
                 sample_rate: 44100,
             },
         };
-        let mut src = connect_source(&cfg, 15).await.expect("v1-first auto connect");
+        let mut src = connect_source(&cfg, 15)
+            .await
+            .expect("v1-first auto connect");
         assert!(
             matches!(src, Source::ScV1 { .. }),
             "auto-detect must resolve to SHOUTcast v1 on a DNAS"
