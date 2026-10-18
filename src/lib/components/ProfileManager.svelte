@@ -7,6 +7,7 @@
   let editing = $state<ConnectionProfile>(blank());
   let password = $state('');
   let isEditing = $state(false);
+  let showPw = $state(false);
 
   function blank(): ConnectionProfile {
     return {
@@ -110,8 +111,9 @@
       /></label
     >
     <div class="col-span-2 text-[10px] leading-relaxed text-gray-400">
-      Streamy auto-detects the protocol on connect — it tries Ultravox 2.1 (DNASv2) first, then falls
-      back to Icecast / Liquidsoap harbor. <span class="text-gray-300">Stream ID</span> is used for
+      Streamy auto-detects the protocol on connect — it tries SHOUTcast v1 first (works on DNAS1
+      and DNAS2), then Ultravox 2.1 (DNASv2 DJ login), then Icecast / Liquidsoap harbor. <span
+        class="text-gray-300">Stream ID</span> is used for
       Ultravox; <span class="text-gray-300">Mount</span> for Icecast. <span class="text-gray-300"
         >Username</span
       > is the Icecast source/DJ login, or the optional Ultravox DJ id (leave blank for Ultravox
@@ -121,18 +123,59 @@
       <input type="checkbox" class="h-4 w-4 accent-lime-500" bind:checked={editing.azuracast} />
       AzuraCast server
       <span class="text-[10px] text-gray-400"
-        >— DJ/source connects via Icecast even if it relays to Shoutcast DNAS for listeners. Skips the
-        Ultravox probe so DJ login is immediate.</span
+        >— DJ/source connects via Icecast even if it relays to Shoutcast DNAS for listeners. Skips
+        protocol probing so DJ login is immediate.</span
       >
     </label>
     <label class="col-span-2 flex flex-col gap-1"
       >Password
-      <input
-        type="password"
-        class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 focus:border-lime-500"
-        bind:value={password}
-        placeholder={isEditing ? '(unchanged)' : ''}
-      /></label
+      <div class="relative">
+        <input
+          type={showPw ? 'text' : 'password'}
+          class="w-full rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 pr-9 text-xs text-gray-100 focus:border-lime-500"
+          bind:value={password}
+          placeholder={isEditing ? '(unchanged)' : ''}
+          autocomplete="new-password"
+        />
+        <button
+          type="button"
+          class="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-gray-400 hover:text-gray-200"
+          aria-label={showPw ? 'Hide password' : 'Show password'}
+          title={showPw ? 'Hide password' : 'Show password'}
+          onclick={() => (showPw = !showPw)}>
+          {#if showPw}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="h-4 w-4"
+            >
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+              <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+              <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+              <path d="m1 1 22 22" />
+            </svg>
+          {:else}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="h-4 w-4"
+            >
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          {/if}
+        </button>
+      </div></label
     >
     <label class="flex flex-col gap-1"
       >Station name <input class="rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 focus:border-lime-500" bind:value={editing.station_name} /></label
