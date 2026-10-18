@@ -95,21 +95,18 @@
       /></label
     >
     <div class="col-span-2 text-[10px] leading-relaxed text-gray-400">
-      Streamy auto-detects the protocol on connect — it tries SHOUTcast v1 first (works on DNAS1
-      and DNAS2), then Ultravox 2.1 (DNASv2 DJ login), then Icecast / Liquidsoap harbor. <span
-        class="text-gray-300">Stream ID</span> is used for
-      Ultravox; <span class="text-gray-300">Mount</span> for Icecast. <span class="text-gray-300"
-        >Username</span
-      > is the Icecast source/DJ login, or the optional Ultravox DJ id (leave blank for Ultravox
-      source login).
+      Protocol is auto-detected: SHOUTcast v1 → v2 → Icecast. <span class="text-gray-300"
+        >Stream ID</span
+      >
+      for SHOUTcast, <span class="text-gray-300">Mount</span> for Icecast. <span
+        class="text-gray-300">Username</span
+      >
+      is the Icecast/DJ login — optional.
     </div>
     <label class="col-span-2 flex items-center gap-2 text-xs text-gray-300">
       <input type="checkbox" class="h-4 w-4 accent-lime-500" bind:checked={editing.azuracast} />
       AzuraCast server
-      <span class="text-[10px] text-gray-400"
-        >— DJ/source connects via Icecast even if it relays to Shoutcast DNAS for listeners. Skips
-        protocol probing so DJ login is immediate.</span
-      >
+      <span class="text-[10px] text-gray-400">— connect via Icecast, skip probing.</span>
     </label>
     <label class="col-span-2 flex flex-col gap-1"
       >Password
