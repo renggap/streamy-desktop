@@ -6,12 +6,18 @@
   // ponytail: localStorage is enough; move to profiles.json "last_used" if
   // selection ever needs to sync with the Rust side.
   let selected = $state(localStorage.getItem('streamy.profile') ?? '');
-  let titleDraft = $state('');
+  // Draft persists across Update (never cleared on success), disconnect, and
+  // webview reload — so the title is retyped only when the user wants to.
+  let titleDraft = $state(localStorage.getItem('streamy.title') ?? '');
   let metaStatus = $state<'idle' | 'sending' | 'ok' | 'err'>('idle');
   let metaTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
     if (selected) localStorage.setItem('streamy.profile', selected);
+  });
+
+  $effect(() => {
+    localStorage.setItem('streamy.title', titleDraft);
   });
 
   $effect(() => {
@@ -83,7 +89,8 @@
     try {
       await setStreamTitle(t);
       streamTitle.set(t);
-      titleDraft = '';
+      // Keep the draft: the input must still show the sent title so it can be
+      // edited/resent (e.g. after a disconnect) without retyping.
       metaStatus = 'ok';
       notify('success', 'Title updated', t);
     } catch (e) {

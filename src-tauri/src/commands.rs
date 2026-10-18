@@ -21,6 +21,7 @@ use crate::record::{RecFormat, RecorderHandle, RecordingStatus};
 use crate::settings::{Settings, SettingsStore};
 use crate::stream::broadcast::{self, BroadcastHandle, StreamConfig, StreamStatus};
 use crate::stream::icy::IcySourceConfig;
+use crate::stream::sc_v1::ScV1Config;
 use crate::stream::ultravox::UltravoxConfig;
 use crate::update;
 
@@ -394,10 +395,24 @@ async fn connect_stream_inner(
         Codec::Mp3 => "audio/mpeg",
         Codec::Aac => "audio/aacp",
     };
-    // Auto-detect: try Ultravox (DNAS2) first, fall back to Icecast/Liquidsoap
-    // harbor. The user no longer picks a protocol — connect_stream hands both
-    // configs to the streamer, which latches to whichever handshake succeeds.
+    // Auto-detect order: SHOUTcast v1 (default — DNAS1 and DNAS2 both accept
+    // it), then Ultravox 2.1 (DNAS2 DJ login / sid > 1), then Icecast/
+    // Liquidsoap harbor. The user no longer picks a protocol — connect_stream
+    // hands all configs to the streamer, which latches to whichever handshake
+    // succeeds.
     let sample_rate = engine.output_rate();
+    // SHOUTcast v1 (ICY source): password line + icy-* headers, raw MP3 after.
+    // v1 has no username for source accounts; the password alone identifies.
+    let sc_v1 = ScV1Config {
+        host: profile.host.clone(),
+        port: profile.port,
+        password: password.clone(),
+        icy_name: profile.station_name.clone(),
+        icy_genre: profile.genre.clone(),
+        icy_url: profile.url.clone(),
+        icy_pub: profile.public,
+        icy_br: bitrate_kbps,
+    };
     // Icecast / Liquidsoap harbor: HTTP SOURCE + Basic auth (user + source
     // password); metadata over the /admin/metadata admin endpoint. Built for
     // both paths — AzuraCast uses it directly, Auto keeps it as the fallback.
@@ -417,11 +432,13 @@ async fn connect_stream_inner(
     };
     // AzuraCast accepts the DJ/source feed over Icecast even when relaying to a
     // Shoutcast DNAS for listeners — so skip the Ultravox probe and connect
-    // Icecast directly. Default (Shoutcast DNAS): Auto, Ultravox-first.
+    // Icecast directly (AzuraCast's shoutcast-input module speaks Icecast
+    // SOURCE, not the v1 password handshake). Default: Auto, v1-first.
     let stream_cfg = if profile.azuracast {
         StreamConfig::Icecast(icecast)
     } else {
         StreamConfig::Auto {
+            sc_v1,
             ultravox: UltravoxConfig {
                 host: profile.host.clone(),
                 port: profile.port,
@@ -555,18 +572,18 @@ pub async fn set_stream_title(
     let title = clamp_title(title);
     // Pull what we need under a brief lock; never await while holding it (the
     // Icecast metadata round-trip can take up to its 5s timeout).
-    let (ice_admin, uvox_tx) = {
+    let (admin, uvox_tx) = {
         let g = bcast.lock().map_err(|e| e.to_string())?;
         match &*g {
-            BcastState::Connected(h) => (h.icecast_admin.clone(), Some(h.metadata_tx.clone())),
+            BcastState::Connected(h) => (h.admin_metadata.clone(), Some(h.metadata_tx.clone())),
             _ => (None, None),
         }
     };
-    match (ice_admin, uvox_tx) {
-        // Icecast: metadata is a separate admin HTTP GET — send it direct so a
-        // busy or dead audio streamer can't make title updates fail with
-        // "channel closed" (the streamer owns the in-band path).
-        (Some(admin), _) => crate::stream::icy::send_metadata(&admin, &title).await,
+    match (admin, uvox_tx) {
+        // Icecast/SHOUTcast-v1: metadata is a separate admin HTTP GET — send it
+        // direct so a busy or dead audio streamer can't make title updates fail
+        // with "channel closed" (the streamer owns the in-band path).
+        (Some(admin), _) => admin.update(&title).await,
         // Ultravox: in-band on the audio socket, via the streamer's channel.
         (None, Some(tx)) => tx.send(title).await.map_err(|e| e.to_string()),
         (None, None) => Ok(()), // not connected — no-op
