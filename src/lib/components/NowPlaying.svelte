@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { nowPlaying, playing, position, monitorFileVolume, errorMsg } from '../stores';
+    import { fmtDuration } from '../format';
+import { nowPlaying, playing, position, monitorFileVolume, errorMsg } from '../stores';
   import { notify } from '../stores';
   import { prev, next, play, pause, seek, setMonitorFileVolume } from '../api';
 
@@ -7,12 +8,7 @@
   let scrubPct = $state(0);
   let trackEl = $state<HTMLDivElement>();
 
-  const fmt = (s: number) => {
-    if (!s || !isFinite(s)) return '0:00';
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
+  const fmt = (s: number) => (!s || !isFinite(s) ? '0:00' : fmtDuration(s));
 
   const pct = $derived(scrubbing ? scrubPct : $position.pct * 100);
   const elapsed = $derived(scrubbing ? (scrubPct / 100) * $position.total_secs : $position.elapsed_secs);

@@ -1,6 +1,6 @@
 // Exercise worker logic without deploy: import the fetch handler with a
 // mock env, hit every branch.
-import worker from '/home/streamy-desktop/update-worker/worker.js';
+import worker from './worker.js';
 
 const ok = (name, cond) => { console.log((cond ? 'PASS' : 'FAIL'), name); if (!cond) process.exitCode = 1; };
 

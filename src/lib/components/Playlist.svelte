@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { playlist, currentIndex, playing } from '../stores';
+    import { fmtDuration } from '../format';
+import { playlist, currentIndex, playing } from '../stores';
   import { notify } from '../stores';
   import { playIndex, addToPlaylist, openAudioFiles } from '../api';
 
@@ -16,12 +17,7 @@
     playIndex(i);
   }
 
-  const fmt = (s: number) => {
-    if (!s || s <= 0) return '--:--';
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
+  const fmt = (s: number) => (!s || s <= 0 ? '--:--' : fmtDuration(s));
 </script>
 
 <div class="flex flex-col gap-3 p-4">

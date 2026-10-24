@@ -104,12 +104,15 @@ mod tests {
         }
         // Drain the remainder; the last value must be the newest frame (9999),
         // proving the newest data survived (vs rtrb push which drops newest).
-        let mut last = None;
+        let mut drained = Vec::new();
         while let Some(f) = rx.pop() {
-            last = Some(f[0] as i32);
+            drained.push(f[0] as i32);
         }
-        assert_eq!(last, Some(9999));
-        // And values must be strictly increasing (order preserved).
+        assert_eq!(drained.last(), Some(&9999));
+        assert!(
+            drained.windows(2).all(|w| w[0] < w[1]),
+            "surviving frames reordered"
+        );
     }
 }
 

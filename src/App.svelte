@@ -73,7 +73,15 @@
         {
           label: 'Download',
           run: () => {
-            openUrl(info.url).catch((e) => console.error('open release page:', e));
+            // The URL crossed the network (worker proxy -> GitHub); a hijacked
+            // feed must not be able to aim the opener at an arbitrary
+            // scheme/site. Release pages always live under our repo.
+            const RELEASES = 'https://github.com/renggap/streamy-desktop/';
+            if (info.url.startsWith(RELEASES)) {
+              openUrl(info.url).catch((e) => console.error('open release page:', e));
+            } else {
+              console.error('update url rejected, unexpected origin:', info.url);
+            }
           },
         },
       );

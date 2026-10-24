@@ -338,9 +338,22 @@ pub async fn start_with_opts(
             emit_status(&app, StreamStatus::Disconnected);
             emit_status(&app, StreamStatus::Connecting);
             let mut delay = backoff_base;
+            // Give up after enough consecutive failed handshakes (~15 min at
+            // the default backoff cap): an endless silent retry loop hides a
+            // dead server from the DJ. A manual Connect always restarts.
+            let mut failures = 0u32;
             loop {
                 if stop_str.load(Ordering::Relaxed) {
                     break;
+                }
+                if failures >= 30 {
+                    emit_status(
+                        &app,
+                        StreamStatus::Error {
+                            message: "gave up reconnecting after 30 failed attempts".into(),
+                        },
+                    );
+                    return;
                 }
                 if sleep_interruptible(delay, &stop_str).await {
                     break;
@@ -361,6 +374,7 @@ pub async fn start_with_opts(
                     }
                     Some(Err(e)) => {
                         diag::log(format!("reconnect failed: {e}"));
+                        failures += 1;
                         delay = (delay * 2).min(backoff_max);
                     }
                     None => break, // stop requested mid-handshake
@@ -547,7 +561,9 @@ fn push_chunks(tx: &mpsc::Sender<Vec<u8>>, mp3: &[u8]) {
 impl BroadcastHandle {
     pub async fn stop(self) {
         self.stop.store(true, Ordering::Relaxed);
-        let _ = self.streamer.await;
+        if let Err(e) = self.streamer.await {
+            diag::log(format!("streamer task join failed: {e}"));
+        }
     }
 }
 

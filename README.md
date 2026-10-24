@@ -16,6 +16,10 @@ Svelte 5 UI).
   (no feedback/echo), and its level still shows on the input meter.
 - **Broadcast** MP3 (Shine, fixed-point) or AAC-LC (fdk-aac-encoder) to
   Shoutcast v2 (ICY + ultravox admin) or Icecast (ICY + admin.cgi metadata).
+  Opt-in SHOUTcast v1 (DNAS1/ICY) checkbox per profile: when ticked, v1 is
+  tried first and auto-detect (Ultravox -> Icecast) stays the fallback;
+  unticked keeps the stock Ultravox -> Icecast order. v1 metadata goes via
+  admin.cgi updinfo.
   Auto-reconnect with fresh handshake; drop-oldest tap keeps the encoder
   realtime if the uplink stalls (audience skips forward, never freezes).
 - **Record** the broadcast mix to MP3/AAC locally; recording works without
@@ -48,7 +52,7 @@ Rust only:
 
 ```bash
 cd src-tauri
-cargo test            # 109 tests pass; 7 live-server tests stay #[ignore]d
+cargo test            # 128 tests pass; 9 live-server tests stay #[ignore]d
                       # behind env creds (see src-tauri/tests/stream_live.rs)
 cargo clippy
 ```
@@ -63,21 +67,30 @@ npm run build         # vite production build
 ## Test against a local Icecast
 
 ```bash
-docker run -d --name icecast -p 8200:8200 \
+docker run -d --name icecast -p 8200:8000 \
   -e ICECAST_SOURCE_PASSWORD=srcpass -e ICECAST_ADMIN_PASSWORD=adminpass \
   moul/icecast
 ```
 
-Then run the ignored live tests (see `src-tauri/tests/stream_live.rs` for
-env vars) or add a profile in the UI pointing at `http://localhost:8200`.
+Then run the ignored live tests or add a profile in the UI pointing at
+`http://localhost:8200`. Ignored-test env vars (none are ever committed):
+
+- `src-tauri/tests/stream_live.rs`: `STREAMY_HOST/PORT/PASS/SID`,
+  `STREAMY_DJ` (uvox user), `STREAMY_ADMIN_PASS` (Icecast admin).
+- `src-tauri/src/stream/sc_v1.rs`: `STREAMY_V1_HOST/PORT/PASS` (+ optional
+  `STREAMY_V1_BR`, default 128).
+- `src-tauri/tests/dnas_aac_dj_probe.rs`: `STREAMY_DJ_HOST/PORT/DNAS/USER/PASS`.
 
 ## Build installers
 
 CI (`.github/workflows/build-windows.yml`) builds the Windows MSI/NSIS on
 every push and stamps `run_number` as the patch version. `test.yml` runs
 `cargo test --locked` + `cargo fmt --check` + `cargo clippy -D warnings`
-+ `svelte-check` on every push/PR; `cargo test --locked` also runs on
-`windows-latest` before any installer is packaged.
++ `svelte-check` + the update-worker logic test on every push/PR, plus an
+`aac-off` guard (`cargo check --no-default-features --tests`) since AAC is
+a Linux-only feature; `cargo test --locked` also runs on `windows-latest`
+before any installer is packaged. Non-tag builds report
+`1.5.<run_number>`; tag builds take the tag's version.
 
 ```bash
 npm run tauri build
@@ -87,6 +100,6 @@ npm run tauri build
 
 - Decode and file I/O currently happen on the realtime audio thread; fine at
   current buffer sizes but the next refactor should move decode to a worker
-  thread feeding a ring (see `docs/audit-*.md` for the plan).
+  thread feeding a ring (see `docs/plans/2026-09-07-code-audit.md` for the plan).
 - Recording is broadcast-mix only (no per-source stems, no AAC+ADTS raw).
 - No repeat/shuffle modes, no per-deck EQ presets (design stretch goals).

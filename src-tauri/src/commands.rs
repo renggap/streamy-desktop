@@ -709,7 +709,9 @@ pub async fn start_recording(
             };
             if commit {
                 engine.set_record_producer(None);
-                let _ = h.stop();
+                if let Err(e) = h.stop() {
+                    diag::log(format!("torn-down recorder stop failed: {e}"));
+                }
                 // A stop ran during setup and won: report it with the path the
                 // (short) take landed on, so the UI's stop is acknowledged.
                 let _ = app.emit(

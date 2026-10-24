@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { recording, recFormat, recordingPath, recStartedAt, errorMsg } from '../stores';
+    import { fmtDuration } from '../format';
+import { recording, recFormat, recordingPath, recStartedAt, errorMsg } from '../stores';
   import { notify } from '../stores';
   import { startRecording, stopRecording } from '../api';
 
@@ -38,12 +39,6 @@
     }
   }
 
-  function fmt(s: number): string {
-    const m = Math.floor(s / 60);
-    const r = s % 60;
-    return `${m}:${r.toString().padStart(2, '0')}`;
-  }
-
   const label = $derived($recording ? '■ Stop' : '● Rec');
 </script>
 
@@ -66,7 +61,7 @@
       {label}
     </button>
     {#if $recording}
-      <span class="ml-auto font-mono text-red-400">{fmt(elapsed)}</span>
+      <span class="ml-auto font-mono text-red-400">{fmtDuration(elapsed)}</span>
     {/if}
   </div>
   {#if $recording && $recordingPath}

@@ -8,5 +8,4 @@ pub mod eq;
 pub mod meter;
 pub mod mic;
 pub mod mixer;
-pub mod resample;
 pub mod ring;

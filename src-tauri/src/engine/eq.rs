@@ -157,10 +157,6 @@ impl Eq3Band {
         self.set_gains_db(low_db, mid_db, high_db);
     }
 
-    pub fn gains_db(&self) -> [f64; 3] {
-        self.gains_db
-    }
-
     /// Process a stereo frame through low -> mid -> high.
     pub fn process(&mut self, frame: [f32; 2]) -> [f32; 2] {
         let l = self.low.process(frame[0]);

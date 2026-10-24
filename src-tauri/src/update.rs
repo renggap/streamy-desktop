@@ -38,17 +38,6 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
 }
 
 /// Extract the release body's first paragraph as short notes.
-pub fn first_paragraph(body: Option<&str>) -> Option<String> {
-    let joined = body?
-        .lines()
-        .take_while(|l| !l.trim().is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
-        .trim()
-        .to_string();
-    (!joined.is_empty()).then_some(joined)
-}
-
 /// Fetch the latest release info from the worker proxy.
 pub async fn fetch_latest(client: &reqwest::Client) -> Result<UpdateInfo, String> {
     let info: UpdateInfo = client
@@ -86,15 +75,5 @@ mod tests {
         assert!(!is_newer("v1.3.9", "1.4.0"));
         // Unparseable never triggers a notification.
         assert!(!is_newer("latest", "1.4.0"));
-    }
-
-    #[test]
-    fn first_paragraph_takes_leading_non_blank_lines() {
-        assert_eq!(
-            first_paragraph(Some("Fix A\nFix B\n\nDetails")),
-            Some("Fix A Fix B".to_string())
-        );
-        assert_eq!(first_paragraph(Some("  \n\nbody")), None);
-        assert_eq!(first_paragraph(None), None);
     }
 }

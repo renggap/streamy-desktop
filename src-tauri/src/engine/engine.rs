@@ -376,11 +376,6 @@ impl AudioEngine {
         Ok(())
     }
 
-    /// Restore the OS default input (startup / when no saved device).
-    pub fn open_default_input(&self) -> Result<(), String> {
-        self.mic.open_default()
-    }
-
     /// Install/remove the broadcast-bus producer the callback pushes to.
     pub fn set_broadcast_producer(&self, tx: Option<StereoRingProducer>) {
         let mut s = self.state.lock();
@@ -854,6 +849,7 @@ mod tests {
             "mic leaked to monitor/speakers: max={}",
             buf.iter().fold(0.0f32, |m, v| m.max(v.abs()))
         );
+
         let mut bmax = 0.0f32;
         while let Some(f) = brx.pop() {
             bmax = bmax.max(f[0].abs()).max(f[1].abs());

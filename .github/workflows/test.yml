@@ -51,3 +51,28 @@ jobs:
           node-version: 24
       - run: npm ci
       - run: npm run check
+      # Worker proxy logic test — plain node, no deploy, no deps.
+      - run: node update-worker/worker.test.mjs
+
+  # AAC is Linux-only behind a cargo feature; the Windows build compiles
+  # without it. Guard that the default tree never grows code that only
+  # compiles with `aac` on.
+  aac-off-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install Tauri system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libxdo-dev libasound2-dev libdbus-1-dev \
+            libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libappindicator3-dev
+      - name: cargo check without the aac feature
+        working-directory: src-tauri
+        run: cargo check --locked --no-default-features --tests

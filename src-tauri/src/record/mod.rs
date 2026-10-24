@@ -156,6 +156,13 @@ fn run_wav<W: Write + Seek>(
                 break;
             }
             written += 4;
+            // RIFF chunk sizes are u32; a >4 GiB take would wrap the header
+            // and "play" as garbage. Stop cleanly at the limit (~6.2 h at
+            // 44.1 kHz stereo 16-bit) instead of corrupting the file.
+            if written > (u32::MAX - 1024) as u64 {
+                err = Some("WAV reached the 4 GiB format limit; take stopped".into());
+                break;
+            }
             got = true;
         }
         if err.is_some() {
