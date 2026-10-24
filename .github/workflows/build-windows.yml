@@ -74,6 +74,7 @@ jobs:
         with:
           name: streamy-desktop-windows
           if-no-files-found: error
+          retention-days: 7
           path: |
             src-tauri/target/release/bundle/**
             src-tauri/target/release/*.exe
