@@ -40,6 +40,25 @@ pub fn log_path() -> String {
 /// truncated. Same-filesystem rename is atomic on Linux/macOS/Windows.
 /// The tmp name is unique per call: concurrent writers (ProfileStore has no
 /// mutex) can never collide on or steal each other's temp file.
+/// Create/truncate `path` readable only by the owner (0600 on Unix): these
+/// files hold credentials (profiles.json plaintext fallback) or settings.
+fn open_owner_only(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::File::create(path)
+    }
+}
+
 pub fn write_atomic(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
     use std::io::Write;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -59,7 +78,7 @@ pub fn write_atomic(path: &std::path::Path, contents: &str) -> std::io::Result<(
         // or ReplaceFile semantics if ever hot.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         let mut f = loop {
-            match std::fs::File::create(&tmp) {
+            match open_owner_only(&tmp) {
                 Ok(f) => break f,
                 Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
                     if std::time::Instant::now() >= deadline {

@@ -764,6 +764,37 @@ pub async fn stop_recording(
 // --- WebView2 runtime repair (in-app, with progress) ---
 
 const WV2_BOOTSTRAPPER_URL: &str = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
+/// The WebView2 bootstrapper is ~2 MB; anything past 10 MB is not it.
+const WV2_MAX_BYTES: u64 = 10 * 1024 * 1024;
+
+/// Verify the downloaded bootstrapper is Authenticode-signed and valid, by
+/// a Microsoft entity. Best-effort: if PowerShell cannot run we fail CLOSED
+/// (repair refuses to launch the file) — the user can still install the
+/// runtime manually. Non-Windows: repair is never reached, report ok.
+fn verify_authenticode(path: &std::path::Path) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let p = path.to_string_lossy().replace('\'', "\'\'");
+        let script = format!(
+            "$s = Get-AuthenticodeSignature -FilePath '{p}'; \
+             ($s.Status -eq 'Valid') -and ($s.SignerCertificate.Subject -like '*Microsoft*')"
+        );
+        match std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+        {
+            Ok(out) => String::from_utf8_lossy(&out.stdout)
+                .trim()
+                .eq_ignore_ascii_case("true"),
+            Err(_) => false,
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = path;
+        true
+    }
+}
 
 #[derive(Serialize, Clone)]
 struct Wv2Progress {
@@ -838,6 +869,15 @@ pub async fn repair_webview2(app: AppHandle) -> Result<String, String> {
     {
         buf.extend_from_slice(&chunk);
         downloaded += chunk.len() as u64;
+        // Size cap: the bootstrapper is ~2 MB; an unbounded "download" is a
+        // memory-exhaustion vector if the URL is ever compromised.
+        if downloaded > WV2_MAX_BYTES {
+            return Err(format!(
+                "bootstrapper exceeds {} MB cap (got {} bytes) — refusing",
+                WV2_MAX_BYTES / (1024 * 1024),
+                downloaded
+            ));
+        }
         let _ = app.emit(events::WEBVIEW2_PROGRESS, Wv2Progress { downloaded, total });
     }
 
@@ -857,7 +897,23 @@ pub async fn repair_webview2(app: AppHandle) -> Result<String, String> {
         std::process::id(),
         ts
     ));
-    std::fs::write(&out, &buf).map_err(|e| e.to_string())?;
+    // Exclusive create: never execute through a symlink an attacker planted
+    // at the predictable temp name, and never clobber a concurrent repair.
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&out)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, &buf))
+        .map_err(|e| e.to_string())?;
+
+    // Authenticode signature (Windows only): the PE magic proves the payload
+    // is an executable, not that it is Microsoft's. Refuse unsigned /
+    // wrongly-signed bootstrappers before spawning them.
+    if !verify_authenticode(&out) {
+        let _ = std::fs::remove_file(&out);
+        return Err("bootstrapper is not Authenticode-signed by Microsoft".into());
+    }
+
     std::process::Command::new(&out)
         .spawn()
         .map_err(|e| format!("failed to launch installer: {e}"))?;

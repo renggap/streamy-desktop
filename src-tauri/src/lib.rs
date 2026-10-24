@@ -108,7 +108,10 @@ pub fn run() {
             let _ = app.state::<engine::engine::AudioEngine>().set_volume(vol);
             // Restore the DJ monitor gain (defaults to unity; broadcast is
             // never affected by this one).
-            let mon = app.state::<settings::SettingsStore>().get().monitor_file_volume;
+            let mon = app
+                .state::<settings::SettingsStore>()
+                .get()
+                .monitor_file_volume;
             let _ = app
                 .state::<engine::engine::AudioEngine>()
                 .set_monitor_file_gain(mon.clamp(0.0, 2.0));

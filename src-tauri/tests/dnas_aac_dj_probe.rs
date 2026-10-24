@@ -10,13 +10,26 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use streamy_desktop::encode::{build, Codec, EncoderConfig};
 use streamy_desktop::stream::icy::{connect, IcySourceConfig};
 
-const HOST: &str = "az1.radioislam.my.id";
-const HARBOR_PORT: u16 = 8035; // Liquidsoap source harbor (DJ relay)
-const DNAS_PORT: u16 = 8030; // Shoutcast DNAS
-const DJ_USER: &str = "jcode";
-const DJ_PASS: &str = "jcode12345";
+// Live-server coordinates + creds come from env vars — never from this file
+// (the previous hardcoded values are in git history; rotate that password).
+//   STREAMY_DJ_HOST   harbor host
+//   STREAMY_DJ_PORT   harbor port (default 8035)
+//   STREAMY_DJ_DNAS   DNAS stats port (default 8030)
+//   STREAMY_DJ_USER   DJ user
+//   STREAMY_DJ_PASS   DJ password
 const BITRATE_KBPS: u32 = 24;
 const SAMPLE_RATE: u32 = 44_100;
+
+fn env(name: &str) -> String {
+    std::env::var(name).unwrap_or_else(|_| panic!("set {name} to run this live probe"))
+}
+
+fn env_port(name: &str, default: u16) -> u16 {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
 
 /// Pull `<BITRATE>N</BITRATE>` (and SAMPLERATE / CONTENT) from a DNAS stats XML.
 fn stats_field(stats: &str, field: &str) -> String {
@@ -43,11 +56,11 @@ async fn http_get(host: &str, port: u16, path: &str) -> String {
 async fn dnas_aac_dj_bitrate_probe() {
     // 1. Connect to the harbor with DJ creds (app's own icy handshake).
     let cfg = IcySourceConfig {
-        host: HOST.into(),
-        port: HARBOR_PORT,
+        host: env("STREAMY_DJ_HOST"),
+        port: env_port("STREAMY_DJ_PORT", 8035),
         mount: "/".into(),
-        user: DJ_USER.into(),
-        password: DJ_PASS.into(),
+        user: env("STREAMY_DJ_USER"),
+        password: env("STREAMY_DJ_PASS"),
         content_type: "audio/aacp".into(),
         icy_name: "Streamy AAC 24 probe".into(),
         icy_genre: "Test".into(),
@@ -98,19 +111,21 @@ async fn dnas_aac_dj_bitrate_probe() {
     tokio::time::sleep(Duration::from_secs(2)).await;
     drop(stream);
 
-    let stats = http_get(HOST, DNAS_PORT, "/stats?sid=1").await;
+    let dnas_port = env_port("STREAMY_DJ_DNAS", 8030);
+    let stats = http_get(&env("STREAMY_DJ_HOST"), dnas_port, "/stats?sid=1").await;
     let reported = stats_field(&stats, "BITRATE");
     let sr = stats_field(&stats, "SAMPLERATE");
     let content = stats_field(&stats, "CONTENT");
     println!(
         "PROBE DNAS: configured={BITRATE_KBPS} kbps server_reported={reported} kbps samplerate={sr} content={content}"
     );
-    println!(
-        "PROBE VERDICT: {}",
-        if reported == "24" {
-            "MATCH (24)"
-        } else {
-            "MISMATCH (not 24)"
-        }
+    // The probe must actually assert its verdict: "?" means the field never
+    // parsed, and a report that never matches the configured bitrate is the
+    // bug class this probe exists to catch.
+    assert_ne!(reported, "?", "DNAS stats did not parse: {stats}");
+    assert_ne!(content, "?", "DNAS CONTENT missing: {stats}");
+    assert!(
+        reported == "24" || reported == "24000",
+        "DNAS reports {reported} kbps, configured {BITRATE_KBPS}"
     );
 }
