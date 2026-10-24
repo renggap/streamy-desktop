@@ -148,6 +148,15 @@ impl Eq3Band {
         self.high = Biquad::high_shelf(sr, Self::HIGH_FREQ, high_db);
     }
 
+    /// Rebase the filters on a new device sample rate (device hot-swap
+    /// rebuild), keeping the current gains. Without this the shelves keep
+    /// stale coefficients at the new rate.
+    pub fn set_sample_rate(&mut self, sample_rate: f64) {
+        self.sample_rate = sample_rate;
+        let [low_db, mid_db, high_db] = self.gains_db;
+        self.set_gains_db(low_db, mid_db, high_db);
+    }
+
     pub fn gains_db(&self) -> [f64; 3] {
         self.gains_db
     }
@@ -232,5 +241,23 @@ mod tests {
         let out = eq.process([0.5, -0.5]);
         assert!((out[0] - 0.5).abs() < 1e-6);
         assert!((out[1] + 0.5).abs() < 1e-6);
+    }
+    #[test]
+    fn set_sample_rate_rebases_filters() {
+        // Device hot-swap rebuild: the EQ must rebase on the new rate with
+        // the same gains, not keep stale 44.1k coefficients at 48k.
+        let mut eq = Eq3Band::new(44100.0);
+        eq.set_gains_db(0.0, 0.0, 12.0);
+        let at_44k = eq.magnitude_at(12000.0);
+        eq.set_sample_rate(48000.0);
+        let at_48k = eq.magnitude_at(12000.0);
+        assert!(
+            (at_44k - at_48k).abs() > 1e-3,
+            "coefficients were not rebased (identical response)"
+        );
+        // Rebased response must equal a fresh 48k design, gain for gain.
+        let mut fresh = Eq3Band::new(48000.0);
+        fresh.set_gains_db(0.0, 0.0, 12.0);
+        assert!((fresh.magnitude_at(12000.0) - at_48k).abs() < 1e-9);
     }
 }

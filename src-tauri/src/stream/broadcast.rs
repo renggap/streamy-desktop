@@ -23,6 +23,10 @@ use serde::Serialize;
 /// died with STATUS_ENTRYPOINT_NOT_FOUND on real Windows (Wine's comctl32
 /// exports it unconditionally, masking the bug).
 pub type EventEmitter = Arc<dyn Fn(&str, serde_json::Value) + Send + Sync>;
+/// Live output-rate source (the engine's `out_rate` atomic): the encoder
+/// watches it so a device hot-swap re-bases the encoder instead of streaming
+/// permanently wrong-rate audio.
+pub type RateWatch = Arc<std::sync::atomic::AtomicU32>;
 
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
@@ -115,18 +119,77 @@ pub struct BroadcastHandle {
     pub icecast_admin: Option<IcySourceConfig>,
 }
 
+/// Encoder thread body: ring -> encoder -> codec chunks -> `mp3_tx` (paced by
+/// realtime producer). During a reconnect the channel fills and blocking_send
+/// backpressures this thread (and in turn the audio ring) — a brief pause,
+/// not a stall. The encoder was built by the caller so init failures surface.
+/// Watches `rate`: on a device hot-swap the encoder is rebuilt at the new
+/// rate (a bounded blip of already-encoded chunks may precede it, vs.
+/// permanently wrong-rate audio). Encode failures are logged, not swallowed:
+/// one bad chunk skips, a persistently failing encoder ends the thread (and
+/// the streamer then sees the channel close).
+fn encoder_thread(
+    rx: StereoRingConsumer,
+    mp3_tx: mpsc::Sender<Vec<u8>>,
+    mut enc: Box<dyn encode::Encoder>,
+    mut enc_cfg: EncoderConfig,
+    rate: RateWatch,
+    stop: Arc<AtomicBool>,
+) {
+    let mut buf: Vec<f32> = Vec::with_capacity(ENCODE_FRAMES * 2);
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            break;
+        }
+        match encode::follow_rate(&mut enc, &mut enc_cfg, rate.load(Ordering::Relaxed)) {
+            Ok(true) => {}
+            Ok(false) => {}
+            Err(e) => diag::log(format!("encoder rate rebase failed: {e}")),
+        }
+        while let Some(frame) = rx.pop() {
+            buf.push(frame[0]);
+            buf.push(frame[1]);
+            if buf.len() >= ENCODE_FRAMES * 2 {
+                break;
+            }
+        }
+        if buf.len() >= ENCODE_FRAMES * 2 {
+            match enc.encode(&buf) {
+                Ok(mp3) => push_chunks(&mp3_tx, &mp3),
+                Err(e) => diag::log(format!("encode chunk failed (skipped): {e}")),
+            }
+            buf.clear();
+        } else {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+    // Drain remainder + flush on stop.
+    if !buf.is_empty() {
+        match enc.encode(&buf) {
+            Ok(mp3) => push_chunks(&mp3_tx, &mp3),
+            Err(e) => diag::log(format!("final encode failed: {e}")),
+        }
+    }
+    match enc.flush() {
+        Ok(mp3) => push_chunks(&mp3_tx, &mp3),
+        Err(e) => diag::log(format!("encoder flush failed: {e}")),
+    }
+}
+
 /// Connect and run the encoder + streamer against `rx` (broadcast PCM),
 /// reconnecting with default backoff on mid-stream drops.
 pub async fn start(
     rx: StereoRingConsumer,
     cfg: StreamConfig,
     enc_cfg: EncoderConfig,
+    rate: RateWatch,
     app: Option<EventEmitter>,
 ) -> Result<BroadcastHandle, String> {
     start_with_opts(
         rx,
         cfg,
         enc_cfg,
+        rate,
         app,
         BACKOFF_BASE,
         BACKOFF_MAX,
@@ -137,10 +200,12 @@ pub async fn start(
 
 /// As `start` but with explicit backoff/timeout — used by tests to keep the
 /// reconnect dance fast and deterministic.
+#[allow(clippy::too_many_arguments)] // test-tuning triplet keeps callers explicit
 pub async fn start_with_opts(
     rx: StereoRingConsumer,
     cfg: StreamConfig,
     enc_cfg: EncoderConfig,
+    rate: RateWatch,
     app: Option<EventEmitter>,
     backoff_base: Duration,
     backoff_max: Duration,
@@ -200,39 +265,7 @@ pub async fn start_with_opts(
     // backpressures this thread (and in turn the audio ring) — a brief pause,
     // not a stall. The encoder was built above so init failures are surfaced.
     let stop_enc = stop.clone();
-    std::thread::spawn(move || {
-        let mut enc = enc;
-        let mut buf: Vec<f32> = Vec::with_capacity(ENCODE_FRAMES * 2);
-        loop {
-            if stop_enc.load(Ordering::Relaxed) {
-                break;
-            }
-            while let Some(frame) = rx.pop() {
-                buf.push(frame[0]);
-                buf.push(frame[1]);
-                if buf.len() >= ENCODE_FRAMES * 2 {
-                    break;
-                }
-            }
-            if buf.len() >= ENCODE_FRAMES * 2 {
-                if let Ok(mp3) = enc.encode(&buf) {
-                    push_chunks(&mp3_tx, &mp3);
-                }
-                buf.clear();
-            } else {
-                std::thread::sleep(Duration::from_millis(5));
-            }
-        }
-        // Drain remainder + flush on stop.
-        if !buf.is_empty() {
-            if let Ok(mp3) = enc.encode(&buf) {
-                push_chunks(&mp3_tx, &mp3);
-            }
-        }
-        if let Ok(mp3) = enc.flush() {
-            push_chunks(&mp3_tx, &mp3);
-        }
-    });
+    std::thread::spawn(move || encoder_thread(rx, mp3_tx, enc, enc_cfg, rate, stop_enc));
 
     // Streamer task: MP3 chunks -> server; metadata on demand. On socket error,
     // reconnect with growing backoff and resume.

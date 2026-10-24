@@ -7,14 +7,14 @@
 // best-effort header patch still runs so the partial file is at least playable.
 
 use std::io::{Seek, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::encode::{EncoderConfig, Mp3Encoder};
+use crate::encode::EncoderConfig;
 use crate::engine::ring::StereoRingConsumer;
 
 /// Encode 0.1s of stereo at a time (matches the broadcast encoder granularity).
@@ -74,24 +74,32 @@ pub fn run<W: Write + Seek>(
     format: RecFormat,
     enc_cfg: &EncoderConfig,
     sample_rate: u32,
+    rate: &Arc<AtomicU32>,
     out: &mut W,
     stop: &AtomicBool,
 ) -> Result<(), String> {
     match format {
-        RecFormat::Mp3 => run_mp3(rx, enc_cfg, out, stop),
-        RecFormat::Wav => run_wav(rx, sample_rate, out, stop),
+        RecFormat::Mp3 => run_mp3(rx, enc_cfg, rate, out, stop),
+        RecFormat::Wav => run_wav(rx, sample_rate, rate, out, stop),
     }
 }
 
 fn run_mp3<W: Write + Seek>(
     rx: &StereoRingConsumer,
     enc_cfg: &EncoderConfig,
+    rate: &Arc<AtomicU32>,
     out: &mut W,
     stop: &AtomicBool,
 ) -> Result<(), String> {
-    let mut enc = Mp3Encoder::new(enc_cfg)?;
+    // Boxed so the device-hot-swap rebase (encode::follow_rate) works the
+    // same as on the broadcast path.
+    let mut enc = crate::encode::build(enc_cfg)?;
+    let mut enc_cfg = *enc_cfg;
     let mut buf: Vec<f32> = Vec::with_capacity(ENC_FRAMES * 2);
     loop {
+        // Follow output-device rate changes (hot-swap): rebuild the encoder
+        // so the file matches the PCM actually recorded.
+        crate::encode::follow_rate(&mut enc, &mut enc_cfg, rate.load(Ordering::Relaxed))?;
         while let Some(frame) = rx.pop() {
             buf.push(frame[0]);
             buf.push(frame[1]);
@@ -121,6 +129,7 @@ fn run_mp3<W: Write + Seek>(
 fn run_wav<W: Write + Seek>(
     rx: &StereoRingConsumer,
     sample_rate: u32,
+    rate: &Arc<AtomicU32>,
     out: &mut W,
     stop: &AtomicBool,
 ) -> Result<(), String> {
@@ -130,6 +139,15 @@ fn run_wav<W: Write + Seek>(
     let mut written: u64 = 0;
     let mut err: Option<String> = None;
     loop {
+        // A WAV header declares one sample rate for the whole file; if the
+        // output device hot-swaps to another rate mid-take the tail would
+        // play back pitch-shifted. Stop the take cleanly instead.
+        let want = rate.load(Ordering::Relaxed);
+        if want != 0 && want != sample_rate && err.is_none() {
+            err = Some(format!(
+                "output device rate changed {sample_rate}->{want} Hz mid-take; stopped to keep the WAV playable"
+            ));
+        }
         let mut got = false;
         while let Some(frame) = rx.pop() {
             let b = frame_to_s16le(frame);
@@ -192,15 +210,29 @@ pub fn start_file(
     rx: StereoRingConsumer,
     format: RecFormat,
     enc_cfg: EncoderConfig,
-    sample_rate: u32,
+    rate: Arc<AtomicU32>,
     path: &str,
     on_error: Option<Box<dyn FnOnce(String) + Send>>,
 ) -> Result<RecorderHandle, String> {
-    let mut out = std::fs::File::create(path).map_err(|e| e.to_string())?;
+    // Exclusive create: never clobber an existing file (or follow a symlink
+    // planted at the predictable timestamped name).
+    let mut out = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|e| e.to_string())?;
     let stop = Arc::new(AtomicBool::new(false));
     let stop_clone = stop.clone();
     let join = std::thread::spawn(move || {
-        let res = run(&rx, format, &enc_cfg, sample_rate, &mut out, &stop_clone);
+        let res = run(
+            &rx,
+            format,
+            &enc_cfg,
+            enc_cfg.sample_rate,
+            &rate,
+            &mut out,
+            &stop_clone,
+        );
         let _ = out.flush();
         if let Err(ref e) = res {
             if let Some(cb) = on_error {

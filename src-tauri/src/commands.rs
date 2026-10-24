@@ -455,26 +455,14 @@ async fn connect_stream_inner(
             let _ = app.emit(event, payload);
         })
     };
-    match broadcast::start(rx, stream_cfg, enc_cfg, Some(emitter)).await {
+    let rate_watch = engine.output_rate_watch();
+    match broadcast::start(rx, stream_cfg, enc_cfg, rate_watch, Some(emitter)).await {
         Ok(h) => {
             // Decide under the lock, drop it, then await. MutexGuard is not
             // Send and must never be held across an await.
-            enum Commit {
-                Store,
-                TearDown,
-            }
             let action = {
                 let g = bcast.lock().map_err(|e| e.to_string())?;
-                match *g {
-                    // A concurrent disconnect ran while we were starting: it
-                    // already cleared the producer; tear this fresh connection
-                    // down instead of leaking an ON-AIR state with no consumer.
-                    BcastState::Idle => Commit::TearDown,
-                    // Still ours (Connecting): commit the handle.
-                    BcastState::Connecting => Commit::Store,
-                    // A second connect raced past the guard — shouldn't happen.
-                    BcastState::Connected(_) => Commit::TearDown,
-                }
+                bcast_commit(&g)
             };
             match action {
                 Commit::Store => {
@@ -503,13 +491,7 @@ pub async fn disconnect_stream(
 ) -> Result<(), String> {
     let h = {
         let mut g = bcast.lock().map_err(|e| e.to_string())?;
-        match std::mem::replace(&mut *g, BcastState::Idle) {
-            BcastState::Connected(h) => Some(h),
-            other => {
-                *g = other; // keep Connecting/Idle as-is
-                None
-            }
-        }
+        bcast_take_for_disconnect(&mut g)
     };
     // Clear the producer BEFORE stopping: after Disconnect returns, the audio
     // callback must not keep pushing into a dead ring.
@@ -578,6 +560,53 @@ pub async fn set_stream_title(
 pub struct RecSlot {
     handle: RecorderHandle,
     path: String,
+}
+
+/// What `connect_stream` does with a fresh handle when `broadcast::start`
+/// returns Ok, given the state it sees under the lock at commit time.
+pub enum Commit {
+    /// Still ours (Connecting): store the handle and go ON AIR.
+    Store,
+    /// A disconnect (or a second connect that raced the guard) won: stop the
+    /// fresh connection instead of leaking an ON-AIR state with no consumer.
+    TearDown,
+}
+
+/// Commit decision for `connect_stream` (see `Commit`). Extracted so the
+/// stop-during-connect interleaving is unit-testable against the real enum.
+pub fn bcast_commit(state: &BcastState) -> Commit {
+    match state {
+        BcastState::Connecting => Commit::Store,
+        BcastState::Idle | BcastState::Connected(_) => Commit::TearDown,
+    }
+}
+
+/// Disconnect entry: returns the live handle, if any. A disconnect during
+/// Connecting must win — the in-flight start then sees Idle at commit and
+/// tears its connection down itself.
+pub fn bcast_take_for_disconnect(g: &mut BcastState) -> Option<BroadcastHandle> {
+    match std::mem::replace(g, BcastState::Idle) {
+        BcastState::Connected(h) => Some(h),
+        BcastState::Connecting | BcastState::Idle => None,
+    }
+}
+
+/// Commit decision for `start_recording`: `true` = a stop won during setup,
+/// tear the fresh take down; `false` = store the Active slot.
+pub fn rec_commit(state: &RecState) -> bool {
+    match state {
+        RecState::Idle => true,
+        RecState::Starting | RecState::Active(_) => false,
+    }
+}
+
+/// Stop entry: returns the Active take, if any. A stop during Starting must
+/// win — the in-flight start then sees Idle at commit and cleans itself up.
+pub fn rec_take_for_stop(g: &mut RecState) -> Option<RecSlot> {
+    match std::mem::replace(g, RecState::Idle) {
+        RecState::Active(s) => Some(s),
+        RecState::Starting | RecState::Idle => None,
+    }
 }
 
 /// Recording lifecycle, mirroring `BcastState`: `Starting` closes the
@@ -652,25 +681,27 @@ pub async fn start_recording(
         );
     });
 
-    match crate::record::start_file(rx, format, enc_cfg, rate, &path_str, Some(on_error)) {
+    let rate_watch = engine.output_rate_watch();
+    match crate::record::start_file(rx, format, enc_cfg, rate_watch, &path_str, Some(on_error)) {
         Ok(h) => {
             // Commit under the lock; if a concurrent stop ran during setup it
             // already cleared the producer and set Idle — honor that and tear
             // the fresh recorder down instead of leaking an Active take.
             let commit = {
-                let mut g = rec.lock().map_err(|e| e.to_string())?;
-                match std::mem::replace(&mut *g, RecState::Idle) {
-                    RecState::Starting => false,
-                    RecState::Active(slot) => {
-                        *g = RecState::Active(slot);
-                        false
-                    }
-                    RecState::Idle => true, // stop won; tear down below
-                }
+                let g = rec.lock().map_err(|e| e.to_string())?;
+                rec_commit(&g)
             };
             if commit {
                 engine.set_record_producer(None);
                 let _ = h.stop();
+                // A stop ran during setup and won: report it with the path the
+                // (short) take landed on, so the UI's stop is acknowledged.
+                let _ = app.emit(
+                    events::RECORDING_STATUS,
+                    RecordingStatus::Stopped {
+                        path: path_str.clone(),
+                    },
+                );
                 return Ok(path_str);
             }
             *rec.lock().map_err(|e| e.to_string())? = RecState::Active(RecSlot {
@@ -704,18 +735,11 @@ pub async fn stop_recording(
     rec: State<'_, Mutex<RecState>>,
     app: AppHandle,
 ) -> Result<(), String> {
-    // Take an Active slot only; Starting stays untouched so the in-flight
-    // start sees Idle at commit and cleans itself up.
+    // Take an Active slot; a stop during Starting wins (the state stays Idle
+    // so the in-flight start tears its fresh take down at commit).
     let slot = {
         let mut g = rec.lock().map_err(|e| e.to_string())?;
-        match std::mem::replace(&mut *g, RecState::Idle) {
-            RecState::Active(s) => Some(s),
-            RecState::Starting => {
-                *g = RecState::Starting;
-                None
-            }
-            RecState::Idle => None,
-        }
+        rec_take_for_stop(&mut g)
     };
     engine.set_record_producer(None);
     let Some(slot) = slot else {

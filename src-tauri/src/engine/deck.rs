@@ -184,6 +184,16 @@ impl Deck {
         let c = self.channels;
         let nframes = self.pcm.len() / c;
         if nframes == 0 {
+            // Buffer drained with nothing decoded behind it (decode lag, or a
+            // track whose tail yielded no samples). If the deck already hit
+            // EOF, end it now — auto-advance and the end-of-track UI wait on
+            // playing=false / just_ended and would otherwise hang forever on
+            // a silent "playing" deck.
+            if self.ended {
+                self.playing = false;
+                self.read_pos = 0.0;
+                self.just_ended = true;
+            }
             return [0.0, 0.0];
         }
         let p = self.read_pos;
@@ -246,8 +256,11 @@ mod tests {
         use std::io::Write;
         let data_len = (dur_frames * 2) as u32; // 16-bit mono
         let riff_len = 36 + data_len;
+        // Unique per call: tests run in parallel and share a temp dir.
+        static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let path =
-            std::env::temp_dir().join(format!("streamy-mono-test-{}.wav", std::process::id()));
+            std::env::temp_dir().join(format!("streamy-mono-test-{}-{n}.wav", std::process::id()));
         let mut f = std::fs::File::create(&path).unwrap();
         // RIFF header
         f.write_all(b"RIFF").unwrap();
@@ -385,5 +398,24 @@ mod tests {
             max = max.max(l.abs()).max(r.abs());
         }
         assert!(max > 0.1, "signal lost after {trim_count} trims, max={max}");
+    }
+    #[test]
+    fn zero_frame_track_ends_instead_of_stalling_silent() {
+        // A track that decodes to zero frames (empty data chunk / erroring
+        // tail): the deck must end (playing=false, just_ended=true) rather
+        // than emit silence "playing" forever — auto-advance and the
+        // end-of-track UI wait on those flags.
+        let path = synthesize_mono_wav(0, 44100, 440.0);
+        let mut d = Deck::new();
+        d.open(path.to_str().unwrap(), 44100).unwrap();
+        d.playing = true;
+        let f = d.next_frame();
+        assert_eq!(f, [0.0, 0.0]);
+        assert!(
+            !d.playing,
+            "drained EOF deck must stop, not stall silent forever"
+        );
+        assert!(d.just_ended, "auto-advance waits on just_ended");
+        let _ = std::fs::remove_file(&path);
     }
 }

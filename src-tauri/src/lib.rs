@@ -106,6 +106,12 @@ pub fn run() {
             // Restore the master volume (defaults to unity / 100%).
             let vol = app.state::<settings::SettingsStore>().get().volume;
             let _ = app.state::<engine::engine::AudioEngine>().set_volume(vol);
+            // Restore the DJ monitor gain (defaults to unity; broadcast is
+            // never affected by this one).
+            let mon = app.state::<settings::SettingsStore>().get().monitor_file_volume;
+            let _ = app
+                .state::<engine::engine::AudioEngine>()
+                .set_monitor_file_gain(mon.clamp(0.0, 2.0));
             // Restore mic noise suppression (RNNoise, broadcast-only path).
             if app.state::<settings::SettingsStore>().get().mic_denoise {
                 let _ = app.state::<engine::engine::AudioEngine>().set_denoise(true);

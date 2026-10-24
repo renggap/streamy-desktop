@@ -157,9 +157,15 @@ async fn broadcast_ring_drives_server_live() {
         }
     });
 
-    let handle = broadcast::start(rx, broadcast::StreamConfig::Ultravox(uvox), enc_cfg, None)
-        .await
-        .expect("broadcast start");
+    let handle = broadcast::start(
+        rx,
+        broadcast::StreamConfig::Ultravox(uvox),
+        enc_cfg,
+        std::sync::Arc::new(std::sync::atomic::AtomicU32::new(44100)),
+        None,
+    )
+    .await
+    .expect("broadcast start");
     tokio::time::sleep(Duration::from_secs(3)).await;
 
     // Push a now-playing title and verify the server picks it up.

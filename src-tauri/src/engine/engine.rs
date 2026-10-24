@@ -76,8 +76,8 @@ struct EngineState {
     crossfade: f32,
     crossfade_target: f32,
     fade_step: f32,
-    eq_a: Eq3Band,
-    eq_b: Eq3Band,
+    /// Shared 3-band EQ on the mixed deck bus (post-crossfade).
+    eq: Eq3Band,
     duck_enabled: bool,
     duck_threshold: f32,
     duck_depth_db: f32,
@@ -147,11 +147,12 @@ impl EngineState {
             self.denoise = None;
         }
         for frame in out.chunks_mut(channels.max(1)) {
-            // Two decks -> per-deck EQ -> equal-power crossfade.
+            // Two decks -> equal-power crossfade -> one shared EQ.
+            // Applying the EQ after the mix is mathematically identical to
+            // per-deck EQ with the same gains (LTI) but the two paths can
+            // never drift apart, and it costs half the filters.
             let raw_a = self.deck_a.next_frame();
             let raw_b = self.deck_b.next_frame();
-            let a = self.eq_a.process(raw_a);
-            let b = self.eq_b.process(raw_b);
             let diff = self.crossfade_target - self.crossfade;
             if diff.abs() <= self.fade_step {
                 self.crossfade = self.crossfade_target;
@@ -159,7 +160,8 @@ impl EngineState {
                 self.crossfade += self.fade_step * diff.signum();
             }
             let (ga, gb) = equal_power(self.crossfade);
-            let deck_frame = [a[0] * ga + b[0] * gb, a[1] * ga + b[1] * gb];
+            let mixed = [raw_a[0] * ga + raw_b[0] * gb, raw_a[1] * ga + raw_b[1] * gb];
+            let deck_frame = self.eq.process(mixed);
 
             // Mic auto-duck: track music RMS, ease the duck gain.
             let inst =
@@ -263,8 +265,7 @@ impl AudioEngine {
             crossfade: 0.0,
             crossfade_target: 0.0,
             fade_step: 1.0 / (CROSSFADE_SECS * FALLBACK_RATE as f32),
-            eq_a: Eq3Band::new(FALLBACK_RATE as f64),
-            eq_b: Eq3Band::new(FALLBACK_RATE as f64),
+            eq: Eq3Band::new(FALLBACK_RATE as f64),
             duck_enabled: false,
             duck_threshold: 0.15,
             duck_depth_db: 12.0,
@@ -393,6 +394,12 @@ impl AudioEngine {
     }
 
     /// Current output device sample rate (broadcast PCM is at this rate).
+    /// Live output-rate source (follows device hot-swaps) for the broadcast /
+    /// record encoder tasks: they watch it and rebase when it changes.
+    pub fn output_rate_watch(&self) -> Arc<AtomicU32> {
+        self.state.lock().out_rate.clone()
+    }
+
     pub fn output_rate(&self) -> u32 {
         self.state.lock().meter.rate()
     }
@@ -417,6 +424,32 @@ impl Drop for AudioEngine {
     }
 }
 
+/// Report an output-start failure: emit once per distinct message (a headless
+/// host retries every 1s forever and would spam the UI event bus), clear
+/// `has_output` so the no-output guard rejects connect/record, and pause
+/// before the next attempt.
+fn report_audio_start_failure<E: std::fmt::Display>(
+    state: &Arc<parking_lot::Mutex<EngineState>>,
+    app: &Arc<Mutex<Option<AppHandle>>>,
+    e: E,
+) {
+    // ponytail: emit once per distinct message; a headless host
+    // retries every 1s forever and would spam the UI event bus.
+    thread_local! {
+        static LAST: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+    }
+    let msg = format!("audio start failed: {e}");
+    LAST.with(|l| {
+        let mut l = l.borrow_mut();
+        if *l != msg {
+            *l = msg.clone();
+            emit_err(app, msg);
+        }
+    });
+    state.lock().has_output = false;
+    thread::sleep(Duration::from_secs(1)); // no device yet; retry
+}
+
 fn audio_loop(
     state: Arc<parking_lot::Mutex<EngineState>>,
     app: Arc<Mutex<Option<AppHandle>>>,
@@ -431,37 +464,27 @@ fn audio_loop(
         {
             let mut s = state.lock();
             s.meter.set_sample_rate(cfg.sample_rate.0);
+            s.eq.set_sample_rate(cfg.sample_rate.0 as f64);
             s.deck_a.set_device_rate(cfg.sample_rate.0);
             s.deck_b.set_device_rate(cfg.sample_rate.0);
             s.fade_step = 1.0 / (CROSSFADE_SECS * cfg.sample_rate.0 as f32);
             s.out_rate.store(cfg.sample_rate.0, Ordering::Relaxed);
         }
         match build_output_stream(state.clone(), app.clone(), sig_tx.clone(), &cfg, &wanted) {
-            Ok(stream) => {
-                let _ = stream.play();
-                state.lock().has_output = true;
-                // Hold the stream until a rebuild (device lost) or shutdown.
-                match sig_rx.recv() {
-                    Ok(Signal::Rebuild) => continue, // drop stream, rebuild on new default
-                    _ => break,
-                }
-            }
-            Err(e) => {
-                // ponytail: emit once per distinct message; a headless host
-                // retries every 1s forever and would spam the UI event bus.
-                thread_local! {
-                    static LAST: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
-                }
-                let msg = format!("audio start failed: {e}");
-                LAST.with(|l| {
-                    let mut l = l.borrow_mut();
-                    if *l != msg {
-                        *l = msg.clone();
-                        emit_err(&app, msg);
+            Ok(stream) => match stream.play() {
+                Ok(()) => {
+                    state.lock().has_output = true;
+                    // Hold the stream until a rebuild (device lost) or shutdown.
+                    match sig_rx.recv() {
+                        Ok(Signal::Rebuild) => continue, // drop stream, rebuild on new default
+                        _ => break,
                     }
-                });
-                thread::sleep(Duration::from_secs(1)); // no device yet; retry
-            }
+                }
+                // A built stream that play() rejects is no more usable than a
+                // build failure: report, clear has_output, retry after a beat.
+                Err(e) => report_audio_start_failure(&state, &app, e),
+            },
+            Err(e) => report_audio_start_failure(&state, &app, e),
         }
     }
 }
@@ -562,8 +585,7 @@ fn build_output_stream(
                                 s.crossfade_target = p;
                             }
                             Action::SetEq(lo, mid, hi) => {
-                                s.eq_a.set_gains_db(lo, mid, hi);
-                                s.eq_b.set_gains_db(lo, mid, hi);
+                                s.eq.set_gains_db(lo, mid, hi);
                             }
                             Action::SetDuck(en, th, db) => {
                                 s.duck_enabled = en;
@@ -650,8 +672,7 @@ mod tests {
             crossfade: 0.0,
             crossfade_target: 0.0,
             fade_step: 1.0 / (0.4 * 44100.0),
-            eq_a: Eq3Band::new(44100.0),
-            eq_b: Eq3Band::new(44100.0),
+            eq: Eq3Band::new(44100.0),
             duck_enabled: false,
             duck_threshold: 0.15,
             duck_depth_db: 12.0,

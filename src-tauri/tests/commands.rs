@@ -62,87 +62,65 @@ fn pe_exe_check_rejects_non_pe() {
 
 /// RecState commit protocol, exercised as a pure state machine across every
 /// interleaving the lock can produce. Mirrors the logic in start_recording /
-/// stop_recording without needing a Tauri app handle.
-mod rec_state_protocol {
-    use streamy_desktop::commands::RecState;
+/// Broadcast/recording commit protocol, tested against the REAL BcastState /
+/// RecState enums (Idle/Connecting/Starting are unit variants, so no Tauri app
+/// handle is needed). The previous version mirrored the logic in a local enum
+/// and drifted from production — it kept passing while the stop-during-start
+/// bug was live because it asserted the buggy behavior as the spec.
+/// Connected/Active arms need real handles and stay covered by the command
+/// paths plus these commit/phase assertions.
+mod state_protocol {
+    use streamy_desktop::commands::{
+        bcast_commit, bcast_take_for_disconnect, rec_commit, rec_take_for_stop, BcastState, Commit,
+        RecState,
+    };
 
-    // RecSlot holds a RecordHandle (not constructible in tests), so the
-    // protocol is validated with a marker type via the same match arms.
-    #[derive(PartialEq, Debug, Clone, Copy)]
-    enum St {
-        Idle,
-        Starting,
-        Active,
-    }
-
-    fn start_commit(cur: St) -> (St, bool) {
-        match cur {
-            // stop won during setup: start tears itself down (commit=true)
-            St::Idle => (St::Idle, true),
-            // normal: start becomes Active
-            St::Starting => (St::Active, false),
-            // cannot happen (start guards on !Idle under the same lock)
-            St::Active => (St::Active, false),
-        }
-    }
-
-    fn stop(cur: St) -> (St, bool) {
-        match cur {
-            St::Active => (St::Idle, true),
-            St::Starting => (St::Starting, false), // untouched; start cleans up
-            St::Idle => (St::Idle, false),
-        }
+    #[test]
+    fn disconnect_during_connect_wins_and_tears_down() {
+        let mut g = BcastState::Connecting;
+        assert!(bcast_take_for_disconnect(&mut g).is_none()); // no live handle yet
+        assert!(
+            matches!(g, BcastState::Idle),
+            "a stop during Connecting must win: Connecting must not survive"
+        );
+        // The in-flight start must tear its fresh connection down at commit,
+        // not go ON AIR with no consumer.
+        assert!(matches!(bcast_commit(&g), Commit::TearDown));
     }
 
     #[test]
-    fn double_start_rejected_at_entry() {
-        // The guard: only Idle admits a start. Starting rejects the second
-        // caller — this is the exact check-then-set race from audit 3.3.
-        assert!(!(matches!(St::Starting, St::Idle)));
-        assert!(!(matches!(St::Active, St::Idle)));
+    fn connect_commits_when_undisturbed() {
+        assert!(matches!(
+            bcast_commit(&BcastState::Connecting),
+            Commit::Store
+        ));
     }
 
     #[test]
     fn stop_during_setup_honored() {
-        // start sets Starting; stop runs mid-setup; start commits and must
-        // see Idle and tear down (commit=true => no Active take leaks).
-        let after_stop = stop(St::Starting);
-        assert_eq!(after_stop, (St::Starting, false));
-        // commit sees the state stop left behind:
-        let (final_, teardown) = start_commit(St::Idle);
-        assert_eq!(final_, St::Idle);
-        assert!(teardown, "start must tear down when stop won");
+        let mut g = RecState::Starting;
+        assert!(rec_take_for_stop(&mut g).is_none()); // no live take yet
+        assert!(
+            matches!(g, RecState::Idle),
+            "a stop during Starting must win: Starting must not survive"
+        );
+        // start sees Idle at commit and tears the fresh take down (true).
+        assert!(rec_commit(&g));
     }
 
     #[test]
-    fn stop_after_active_takes_slot() {
-        let (s, took) = stop(St::Active);
-        assert_eq!(s, St::Idle);
-        assert!(took);
+    fn start_commits_when_undisturbed() {
+        assert!(!rec_commit(&RecState::Starting));
     }
 
     #[test]
     fn stop_when_idle_is_noop() {
-        assert_eq!(stop(St::Idle), (St::Idle, false));
-    }
+        let mut r = RecState::Idle;
+        assert!(rec_take_for_stop(&mut r).is_none());
+        assert!(matches!(r, RecState::Idle));
 
-    #[test]
-    fn every_interleaving_reaches_consistent_state() {
-        for a in [St::Idle, St::Starting, St::Active] {
-            for b in [St::Idle, St::Starting, St::Active] {
-                let (s1, _) = stop(a);
-                let (s2, _) = start_commit(s1);
-                let _ = b; // observer sees only valid states
-                assert!(matches!(s2, St::Idle | St::Starting | St::Active));
-            }
-        }
-    }
-
-    #[test]
-    fn rec_state_pub_enum_shape_unchanged() {
-        // Compile-time proof the real enum still has the three variants in
-        // the order the commit protocol matches on.
-        let idle = RecState::Idle;
-        assert!(matches!(idle, RecState::Idle));
+        let mut b = BcastState::Idle;
+        assert!(bcast_take_for_disconnect(&mut b).is_none());
+        assert!(matches!(b, BcastState::Idle));
     }
 }

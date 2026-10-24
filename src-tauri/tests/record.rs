@@ -7,6 +7,11 @@ use streamy_desktop::encode::Codec;
 use streamy_desktop::encode::EncoderConfig;
 use streamy_desktop::record::{frame_to_s16le, run, wav_header, RecFormat};
 
+/// Static output-rate watch for run(): most tests never hot-swap.
+fn rate_watch(r: u32) -> std::sync::Arc<std::sync::atomic::AtomicU32> {
+    std::sync::Arc::new(std::sync::atomic::AtomicU32::new(r))
+}
+
 #[test]
 fn wav_header_is_canonical_44_bytes() {
     let h = wav_header(1600, 44100, 2);
@@ -60,6 +65,7 @@ fn wav_run_writes_header_and_all_samples() {
             codec: Codec::Mp3,
         },
         44100,
+        &rate_watch(44100),
         &mut out,
         &stop,
     )
@@ -94,7 +100,16 @@ fn mp3_run_is_byte_identical_to_direct_encode() {
         bitrate_kbps: 192,
         codec: Codec::Mp3,
     };
-    run(&rx, RecFormat::Mp3, &cfg, 44100, &mut rec_out, &stop).unwrap();
+    run(
+        &rx,
+        RecFormat::Mp3,
+        &cfg,
+        44100,
+        &rate_watch(44100),
+        &mut rec_out,
+        &stop,
+    )
+    .unwrap();
 
     // Direct encode mirroring the recorder's fixed-chunk loop.
     use streamy_desktop::encode::Mp3Encoder;
@@ -175,11 +190,55 @@ fn run_propagates_write_error() {
         bitrate_kbps: 192,
         codec: Codec::Mp3,
     };
-    let res = run(&rx, RecFormat::Mp3, &cfg, 44100, &mut sink, &stop);
+    let res = run(
+        &rx,
+        RecFormat::Mp3,
+        &cfg,
+        44100,
+        &rate_watch(44100),
+        &mut sink,
+        &stop,
+    );
     assert!(res.is_err(), "write error must propagate, got {res:?}");
     let msg = res.unwrap_err();
     assert!(
         msg.contains("disk full") || msg.contains("WriteZero") || msg.contains("write"),
         "msg: {msg}"
     );
+}
+
+#[test]
+fn wav_take_stops_when_output_rate_changes() {
+    // Device hot-swap mid-take: the WAV header declares one rate for the
+    // whole file, so a change must end the take with a clear error instead
+    // of writing a pitch-shifted tail.
+    let (tx, rx) = streamy_desktop::engine::ring::StereoRing::new(32768);
+    for _ in 0..(4410 * 2) {
+        tx.push([0.1, -0.1]);
+    }
+    let rate: std::sync::Arc<std::sync::atomic::AtomicU32> =
+        std::sync::Arc::new(std::sync::atomic::AtomicU32::new(44100));
+    rate.store(48000, std::sync::atomic::Ordering::Relaxed); // the hot-swap
+    let stop = AtomicBool::new(true); // ring fully fed already
+    let mut out = std::io::Cursor::new(Vec::<u8>::new());
+    let res = run(
+        &rx,
+        RecFormat::Wav,
+        &EncoderConfig {
+            sample_rate: 44100,
+            channels: 2,
+            bitrate_kbps: 192,
+            codec: Codec::Mp3,
+        },
+        44100,
+        &rate,
+        &mut out,
+        &stop,
+    );
+    let err = res.expect_err("rate change must stop the take");
+    assert!(err.contains("rate changed"), "unexpected error: {err}");
+    // Header still patched: playable partial file starting with RIFF/WAVE.
+    let buf = out.into_inner();
+    assert_eq!(&buf[0..4], b"RIFF");
+    assert_eq!(&buf[8..12], b"WAVE");
 }
