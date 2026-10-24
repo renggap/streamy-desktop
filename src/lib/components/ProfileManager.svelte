@@ -7,6 +7,8 @@
   let editing = $state<ConnectionProfile>(blank());
   let password = $state('');
   let isEditing = $state(false);
+  // The form stays hidden until the user asks for it (Add profile / Edit).
+  let showForm = $state(false);
 
   function blank(): ConnectionProfile {
     return {
@@ -21,6 +23,7 @@
       url: '',
       public: true,
       azuracast: false,
+      shoutcast_v1: false,
     };
   }
 
@@ -32,12 +35,21 @@
     editing = { ...p };
     password = '';
     isEditing = true;
+    showForm = true;
   }
 
   function reset() {
     editing = blank();
     password = '';
     isEditing = false;
+    showForm = false;
+  }
+
+  function addNew() {
+    editing = blank();
+    password = '';
+    isEditing = false;
+    showForm = true;
   }
 
   async function save() {
@@ -77,6 +89,7 @@
 </script>
 
 <div class="space-y-3">
+  {#if showForm}
   <h3 class="joko-label">
     {isEditing ? 'Edit profile' : 'New profile'}
   </h3>
@@ -118,6 +131,15 @@
       source login).
     </div>
     <label class="col-span-2 flex items-center gap-2 text-xs text-gray-300">
+      <input type="checkbox" class="h-4 w-4 accent-lime-500" bind:checked={editing.shoutcast_v1} />
+      SHOUTcast v1 protocol
+      <span class="text-[10px] text-gray-400"
+        >— connect with the classic ICY v1 source handshake first (DNASv1 servers, or DNASv2 stream
+        id 1). Leave unchecked for Ultravox DJ accounts or stream id &gt; 1; auto-detect stays as the
+        fallback either way.</span
+      >
+    </label>
+    <label class="col-span-2 flex items-center gap-2 text-xs text-gray-300">
       <input type="checkbox" class="h-4 w-4 accent-lime-500" bind:checked={editing.azuracast} />
       AzuraCast server
       <span class="text-[10px] text-gray-400"
@@ -158,6 +180,12 @@
       >
     {/if}
   </div>
+  {:else}
+  <button
+    class="w-full rounded-lg border border-dashed border-gray-500 px-3 py-2.5 text-xs font-semibold text-gray-300 transition-colors hover:border-lime-500 hover:text-lime-400"
+    onclick={addNew}>+ Add profile</button
+  >
+  {/if}
 
   <div class="border-t border-gray-600 pt-3">
     <div class="joko-label mb-2">Saved</div>
@@ -184,7 +212,7 @@
         </div>
       {:else}
         <div class="rounded-xl border border-dashed border-gray-500 px-4 py-6 text-center text-xs text-gray-400">
-          No saved profiles — fill the form above.
+          No saved profiles yet — click “Add profile” to create one.
         </div>
       {/each}
     </div>

@@ -38,6 +38,7 @@ use crate::encode::{self, EncoderConfig};
 use crate::engine::ring::StereoRingConsumer;
 use crate::events::{self, StreamStats};
 use crate::stream::icy::IcySourceConfig;
+use crate::stream::sc_v1::ScV1Config;
 use crate::stream::ultravox::{self, UltravoxConfig};
 
 /// MP3 must be sent in chunks under the Ultravox max payload (16377).
@@ -60,12 +61,20 @@ pub enum StreamStatus {
 }
 
 /// Connection parameters for the source protocol. `Auto` tries Ultravox first
-/// and falls back to Icecast — the app no longer asks the user to pick. Built
-/// from a `ConnectionProfile` + resolved password in `connect_stream`.
+/// and falls back to Icecast — the app no longer asks the user to pick. When
+/// the profile's "SHOUTcast v1" checkbox is set, `Auto` first tries the v1
+/// (ICY) source handshake — DNAS1 only speaks it, DNAS2 still accepts it —
+/// before the Ultravox/Icecast chain, so a checked box never takes the user
+/// off air against a non-v1 server. Built from a `ConnectionProfile` +
+/// resolved password in `connect_stream`.
+#[allow(clippy::large_enum_variant)]
 pub enum StreamConfig {
     Ultravox(UltravoxConfig),
     Icecast(IcySourceConfig),
+    ScV1(ScV1Config),
     Auto {
+        /// Present = the v1 opt-in checkbox is checked (try v1 first).
+        sc_v1: Option<ScV1Config>,
         ultravox: UltravoxConfig,
         icecast: IcySourceConfig,
     },
@@ -77,18 +86,41 @@ pub enum StreamConfig {
 #[allow(clippy::large_enum_variant)] // both variants socket-sized; no boxing win
 enum Source {
     Ultravox(TcpStream),
+    ScV1 {
+        stream: TcpStream,
+        admin: ScV1Config,
+    },
     Icecast {
         stream: TcpStream,
         admin: IcySourceConfig,
     },
 }
 
-impl Source {
-    async fn send_audio(&mut self, mp3: &[u8]) -> Result<(), String> {
+/// Admin metadata channel for sources whose title updates ride a separate
+/// connection (Icecast /admin/metadata, SHOUTcast v1 admin.cgi). Ultravox is
+/// absent because its metadata is in-band on the audio socket.
+#[derive(Clone)]
+pub enum AdminMetadata {
+    Icecast(IcySourceConfig),
+    ScV1(ScV1Config),
+}
+
+impl AdminMetadata {
+    pub async fn update(&self, title: &str) -> Result<(), String> {
         match self {
-            Source::Ultravox(s) => ultravox::send_mp3(s, mp3).await,
-            Source::Icecast { stream, .. } => {
-                stream.write_all(mp3).await.map_err(|e| e.to_string())
+            AdminMetadata::Icecast(cfg) => crate::stream::icy::send_metadata(cfg, title).await,
+            AdminMetadata::ScV1(cfg) => crate::stream::sc_v1::send_metadata(cfg, title).await,
+        }
+    }
+}
+
+impl Source {
+    async fn send_audio(&mut self, audio: &[u8]) -> Result<(), String> {
+        match self {
+            Source::Ultravox(s) => ultravox::send_mp3(s, audio).await,
+            // v1 + Icecast both ship raw codec bytes on the audio socket.
+            Source::ScV1 { stream, .. } | Source::Icecast { stream, .. } => {
+                stream.write_all(audio).await.map_err(|e| e.to_string())
             }
         }
     }
@@ -96,13 +128,14 @@ impl Source {
     async fn send_metadata(&mut self, title: &str) -> Result<(), String> {
         match self {
             Source::Ultravox(s) => ultravox::send_metadata(s, title).await,
+            Source::ScV1 { admin, .. } => crate::stream::sc_v1::send_metadata(admin, title).await,
             Source::Icecast { admin, .. } => crate::stream::icy::send_metadata(admin, title).await,
         }
     }
 
     /// Whether a metadata-send error means the audio socket itself is dead and
     /// must be reconnected. Ultravox sends metadata in-band (an error = socket
-    /// dead); Icecast metadata is a separate HTTP GET (an error is non-fatal).
+    /// dead); Icecast/ScV1 metadata is a separate HTTP GET (non-fatal).
     fn metadata_fatal(&self) -> bool {
         matches!(self, Source::Ultravox(_))
     }
@@ -112,11 +145,12 @@ pub struct BroadcastHandle {
     stop: Arc<AtomicBool>,
     streamer: JoinHandle<()>,
     pub metadata_tx: mpsc::Sender<String>,
-    /// Resolved Icecast admin cfg when the live source is Icecast — lets
-    /// `set_stream_title` push metadata direct via the `/admin/metadata` GET,
-    /// independent of the audio streamer task. `None` for Ultravox (metadata
-    /// is in-band on the audio socket, so it goes through `metadata_tx`).
-    pub icecast_admin: Option<IcySourceConfig>,
+    /// Resolved admin cfg when the live source updates titles over a separate
+    /// connection (Icecast `/admin/metadata`, SHOUTcast v1 `admin.cgi`) —
+    /// lets `set_stream_title` push metadata direct, independent of the audio
+    /// streamer task. `None` for Ultravox (metadata is in-band on the audio
+    /// socket, so it goes through `metadata_tx`).
+    pub admin_metadata: Option<AdminMetadata>,
 }
 
 /// Encoder thread body: ring -> encoder -> codec chunks -> `mp3_tx` (paced by
@@ -245,13 +279,20 @@ pub async fn start_with_opts(
             (StreamConfig::Auto { icecast, .. }, Source::Icecast { .. }) => {
                 StreamConfig::Icecast(icecast.clone())
             }
-            _ => unreachable!("Auto must resolve to Ultravox or Icecast"),
+            (
+                StreamConfig::Auto {
+                    sc_v1: Some(sc_v1), ..
+                },
+                Source::ScV1 { .. },
+            ) => StreamConfig::ScV1(sc_v1.clone()),
+            _ => unreachable!("Auto must resolve to a concrete source"),
         };
         cfg = latched;
     }
-    // Icecast metadata goes direct (separate HTTP GET); Ultravox is in-band.
-    let icecast_admin = match &source {
-        Source::Icecast { admin, .. } => Some(admin.clone()),
+    // Icecast/v1 metadata goes direct (separate HTTP GET); Ultravox is in-band.
+    let admin_metadata = match &source {
+        Source::Icecast { admin, .. } => Some(AdminMetadata::Icecast(admin.clone())),
+        Source::ScV1 { admin, .. } => Some(AdminMetadata::ScV1(admin.clone())),
         _ => None,
     };
     emit_status(&app, StreamStatus::Connected);
@@ -332,7 +373,7 @@ pub async fn start_with_opts(
         stop,
         streamer,
         metadata_tx,
-        icecast_admin,
+        admin_metadata,
     })
 }
 
@@ -441,19 +482,52 @@ async fn connect_icecast(c: &IcySourceConfig, timeout_secs: u64) -> Result<Sourc
     })
 }
 
+/// Run the SHOUTcast v1 handshake with a timeout cap.
+async fn connect_sc_v1(c: &ScV1Config, timeout_secs: u64) -> Result<Source, String> {
+    let s = match tokio::time::timeout(
+        Duration::from_secs(timeout_secs),
+        crate::stream::sc_v1::connect(c),
+    )
+    .await
+    {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err(e),
+        Err(_) => return Err(format!("connect timed out after {timeout_secs}s")),
+    };
+    Ok(Source::ScV1 {
+        stream: s,
+        admin: c.clone(),
+    })
+}
+
 /// Run the source handshake with a cap so a silent server can't hang Connect.
 /// `Auto` tries Ultravox first (DNAS2), then falls back to Icecast/Liquidsoap.
 async fn connect_source(cfg: &StreamConfig, timeout_secs: u64) -> Result<Source, String> {
     match cfg {
         StreamConfig::Ultravox(c) => connect_ultravox(c, timeout_secs).await,
         StreamConfig::Icecast(c) => connect_icecast(c, timeout_secs).await,
-        StreamConfig::Auto { ultravox, icecast } => {
-            // Try Ultravox first (DNAS2). A non-Ultravox server (Icecast /
-            // Liquidsoap harbor) rejects the binary handshake fast — the first
-            // response byte isn't the 0x5A sync — so the Icecast fallback is
-            // usually immediate. The short probe cap only matters for a server
-            // that stays totally silent.
+        StreamConfig::ScV1(c) => connect_sc_v1(c, timeout_secs).await,
+        StreamConfig::Auto {
+            sc_v1,
+            ultravox,
+            icecast,
+        } => {
+            // Opt-in SHOUTcast v1 (the profile checkbox): DNAS1 only speaks
+            // the ICY password handshake and DNAS2 still accepts it. An
+            // Icecast/Liquidsoap server answers the password line with an
+            // HTTP error and drops the socket — fast rejection, so the
+            // fallback to the normal chain is immediate.
             let probe_secs = timeout_secs.min(4);
+            if let Some(sc_v1) = sc_v1 {
+                if let Ok(s) = connect_sc_v1(sc_v1, probe_secs).await {
+                    return Ok(s);
+                }
+            }
+            // Ultravox next (DNAS2): a non-Ultravox server (Icecast /
+            // Liquidsoap harbor) rejects the binary handshake fast — the
+            // first response byte isn't the 0x5A sync — so the Icecast
+            // fallback is usually immediate. The short probe cap only
+            // matters for a server that stays totally silent.
             if let Ok(s) = connect_ultravox(ultravox, probe_secs).await {
                 return Ok(s);
             }
@@ -560,7 +634,11 @@ mod tests {
             genre: "".into(),
             url: "".into(),
         };
-        let cfg = StreamConfig::Auto { ultravox, icecast };
+        let cfg = StreamConfig::Auto {
+            sc_v1: None,
+            ultravox,
+            icecast,
+        };
         let mut src = connect_source(&cfg, 15)
             .await
             .expect("auto connect should resolve");

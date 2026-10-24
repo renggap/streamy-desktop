@@ -23,6 +23,12 @@ pub struct ConnectionProfile {
     /// login on AzuraCast. Default false: Shoutcast DNAS using Ultravox.
     #[serde(default)]
     pub azuracast: bool,
+    /// Stream with the SHOUTcast v1 (ICY) source protocol: tried first, with
+    /// the normal Ultravox -> Icecast auto-detect chain kept as fallback.
+    /// For DNAS1 servers (or DNAS2 stream id 1); Ultravox is still needed for
+    /// DJ accounts / sid > 1, so leave unchecked in that case.
+    #[serde(default)]
+    pub shoutcast_v1: bool,
     /// Present only when the OS keyring is unavailable (plaintext fallback).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plaintext_pw: Option<String>,
@@ -287,6 +293,7 @@ mod tests {
             url: "u".into(),
             public: false,
             azuracast: false,
+            shoutcast_v1: false,
             plaintext_pw: None,
         };
         store.save(p, Some("s3cret".into())).expect("save");
@@ -318,6 +325,7 @@ mod tests {
                     url: "https://x.example".into(),
                     public: false,
                     azuracast: false,
+                    shoutcast_v1: false,
                     plaintext_pw: None,
                 },
                 Some("pw".into()),
@@ -365,6 +373,7 @@ mod tests {
             url: String::new(),
             public: false,
             azuracast: false,
+            shoutcast_v1: false,
             plaintext_pw: None,
         };
         p.plaintext_pw = Some("hunter2".into());
@@ -396,6 +405,7 @@ mod tests {
             url: String::new(),
             public: false,
             azuracast: false,
+            shoutcast_v1: false,
             plaintext_pw: None,
         };
         p.plaintext_pw = Some("hunter2".into());

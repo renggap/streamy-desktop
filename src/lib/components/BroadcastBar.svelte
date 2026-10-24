@@ -3,15 +3,34 @@
   import { notify } from '../stores';
   import { connectStream, disconnectStream, setStreamTitle, BITRATES } from '../api';
 
+  // localStorage can throw in hardened/privacy browser contexts — guard every
+  // access so a locked-down storage never breaks the bar on load.
+  function localGet(k: string): string | null {
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  }
+  function localSet(k: string, v: string) {
+    try {
+      localStorage.setItem(k, v);
+    } catch {
+      /* best-effort persistence only */
+    }
+  }
+
   // ponytail: localStorage is enough; move to profiles.json "last_used" if
   // selection ever needs to sync with the Rust side.
-  let selected = $state(localStorage.getItem('streamy.profile') ?? '');
-  let titleDraft = $state('');
+  let selected = $state(localGet('streamy.profile') ?? '');
+  // The title draft sticks: it survives an Update press and an app restart,
+  // because DJs iterate on one title (live show name) across updates.
+  let titleDraft = $state(localGet('streamy.title') ?? '');
   let metaStatus = $state<'idle' | 'sending' | 'ok' | 'err'>('idle');
   let metaTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
-    if (selected) localStorage.setItem('streamy.profile', selected);
+    if (selected) localSet('streamy.profile', selected);
   });
 
   $effect(() => {
@@ -83,7 +102,9 @@
     try {
       await setStreamTitle(t);
       streamTitle.set(t);
-      titleDraft = '';
+      // Keep the draft (and persist it): "Update" pushes the title to the
+      // server, it does not consume it.
+      localSet('streamy.title', t);
       metaStatus = 'ok';
       notify('success', 'Title updated', t);
     } catch (e) {

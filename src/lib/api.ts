@@ -88,6 +88,8 @@ export interface ConnectionProfile {
   public: boolean;
   /** AzuraCast / Icecast-DJ server: force Icecast source protocol (skip Ultravox). */
   azuracast: boolean;
+  /** Connect with the SHOUTcast v1 (ICY) source protocol first (opt-in). */
+  shoutcast_v1: boolean;
 }
 
 export const BITRATES = [16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];

@@ -24,6 +24,7 @@ fn sample(name: &str) -> ConnectionProfile {
         url: "http://x".into(),
         public: true,
         azuracast: false,
+        shoutcast_v1: false,
         plaintext_pw: None,
     }
 }
@@ -180,4 +181,20 @@ fn delete_cleans_keyring_best_effort() {
     );
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn old_profile_json_without_v1_flag_loads_as_false() {
+    // 1.5.0-era profiles.json has no shoutcast_v1 key; serde must default it
+    // to false (v1 stays strictly opt-in), not error.
+    let (store, dir) = tmp_store("v1compat");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("profiles.json"),
+        r#"[{"name":"legacy","host":"example.com","port":8000,"user":"dj","mount":"/live","stream_id":1,"station_name":"s","genre":"g","url":"","public":true}]"#,
+    )
+    .unwrap();
+    let list = store.list();
+    assert_eq!(list.len(), 1);
+    assert!(!list[0].shoutcast_v1, "missing key must default to false");
 }
