@@ -167,7 +167,7 @@ fn normalize_mount(m: &str) -> String {
 }
 
 /// Percent-encode for a query string (RFC 3986 unreserved kept).
-pub fn url_encode(s: &str) -> String {
+fn url_encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for &b in s.as_bytes() {
         match b {

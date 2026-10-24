@@ -20,11 +20,6 @@ export const monitorFileVolume = writable<number>(100);
 export const streamTitle = writable<string>('');
 export const sourceMode = writable<SourceMode>('file');
 
-// Profile editor screen: which profile is being edited ('' = new profile),
-// null = editor closed. Lives in the store so the settings list (Edit/Add
-// buttons) and the editor screen share one source of truth.
-export const profileEditing = writable<string | null>(null);
-
 // WebView2 runtime repair (in-app interstitial).
 export type Wv2State = 'idle' | 'downloading' | 'launching' | 'done' | 'err';
 export const wv2State = writable<Wv2State>('idle');
@@ -73,7 +68,7 @@ export interface RecordingStatus {
   message?: string;
 }
 
-export type View = 'home' | 'stream' | 'settings' | 'profile-editor';
+export type View = 'home' | 'stream' | 'settings';
 export const view = writable<View>('home');
 
 export interface Position {

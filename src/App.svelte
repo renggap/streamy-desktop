@@ -54,7 +54,6 @@
   import RecordBar from './lib/components/RecordBar.svelte';
   import Mixer from './lib/components/Mixer.svelte';
   import ProfileManager from './lib/components/ProfileManager.svelte';
-  import ProfileEditor from './lib/components/ProfileEditor.svelte';
   import RecordingSettings from './lib/components/RecordingSettings.svelte';
   import WebView2Repair from './lib/components/WebView2Repair.svelte';
   import WelcomeModal from './lib/components/WelcomeModal.svelte';
@@ -203,12 +202,6 @@
           <Mixer />
         </div>
       </div>
-    {:else if $view === 'profile-editor'}
-      <div class="p-4">
-        <div class="joko-card rounded-xl p-4">
-          <ProfileEditor />
-        </div>
-      </div>
     {:else}
       <div class="space-y-4 p-4">
         <div class="joko-card rounded-xl p-4">
@@ -235,7 +228,5 @@
     {/if}
   </section>
 
-  {#if $view !== 'profile-editor'}
-    <BottomNav />
-  {/if}
+  <BottomNav />
 </main>
