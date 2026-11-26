@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { profiles, streamStatus, bitrate, codec, view, errorMsg, streamTitle, streamStats } from '../stores';
+  import { profiles, streamStatus, bitrate, codec, view, errorMsg, streamTitle, streamStats, titleOwned } from '../stores';
   import { notify } from '../stores';
   import { connectStream, disconnectStream, setStreamTitle, BITRATES } from '../api';
+
+  const TITLE_GALLERY_MAX = 10;
 
   // localStorage can throw in hardened/privacy browser contexts — guard every
   // access so a locked-down storage never breaks the bar on load.
@@ -23,11 +25,27 @@
   // ponytail: localStorage is enough; move to profiles.json "last_used" if
   // selection ever needs to sync with the Rust side.
   let selected = $state(localGet('streamy.profile') ?? '');
-  // The title draft sticks: it survives an Update press and an app restart,
-  // because DJs iterate on one title (live show name) across updates.
-  let titleDraft = $state(localGet('streamy.title') ?? '');
+  // The title is one piece of state: the `streamTitle` store. It survives an
+  // Update press, view switches (the bar unmounts) and app restarts. A track
+  // change still pushes its own title to the server, but never silently
+  // replaces what the DJ typed once they have taken ownership (see App.svelte).
   let metaStatus = $state<'idle' | 'sending' | 'ok' | 'err'>('idle');
   let metaTimer: ReturnType<typeof setTimeout> | undefined;
+  let gallery = $state<string[]>(loadGallery());
+  let showGallery = $state(false);
+
+  function loadGallery(): string[] {
+    try {
+      const v = JSON.parse(localGet('streamy.titles') ?? '[]');
+      return Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, TITLE_GALLERY_MAX) : [];
+    } catch {
+      return [];
+    }
+  }
+  function saveGallery(list: string[]) {
+    gallery = list.slice(0, TITLE_GALLERY_MAX);
+    localSet('streamy.titles', JSON.stringify(gallery));
+  }
 
   $effect(() => {
     if (selected) localSet('streamy.profile', selected);
@@ -94,17 +112,11 @@
     liveReconnect();
   }
 
-  async function sendTitle() {
-    const t = (titleDraft || '').trim();
-    if (!t || !connected) return;
+  async function pushTitle(t: string) {
     clearTimeout(metaTimer);
     metaStatus = 'sending';
     try {
       await setStreamTitle(t);
-      streamTitle.set(t);
-      // Keep the draft (and persist it): "Update" pushes the title to the
-      // server, it does not consume it.
-      localSet('streamy.title', t);
       metaStatus = 'ok';
       notify('success', 'Title updated', t);
     } catch (e) {
@@ -115,6 +127,40 @@
     metaTimer = setTimeout(() => {
       metaStatus = 'idle';
     }, 2500);
+  }
+
+  async function sendTitle() {
+    const t = ($streamTitle || '').trim();
+    if (!t || !connected) return;
+    streamTitle.set(t);
+    titleOwned.set(true);
+    await pushTitle(t);
+  }
+
+  // --- Title gallery: up to TITLE_GALLERY_MAX saved titles, one click re-sends ---
+  function pinTitle() {
+    const t = ($streamTitle || '').trim();
+    if (!t) return;
+    if (gallery.includes(t)) {
+      notify('info', 'Already saved', t);
+      return;
+    }
+    if (gallery.length >= TITLE_GALLERY_MAX) {
+      notify('error', 'Gallery full', `Max ${TITLE_GALLERY_MAX} titles. Remove one first.`);
+      return;
+    }
+    saveGallery([...gallery, t]);
+    notify('success', 'Title saved', t);
+  }
+
+  function useTitle(t: string) {
+    streamTitle.set(t);
+    titleOwned.set(true);
+    if (connected) pushTitle(t);
+  }
+
+  function removeTitle(t: string) {
+    saveGallery(gallery.filter((x) => x !== t));
   }
 
   const label = $derived(
@@ -211,14 +257,31 @@
        the /admin/metadata endpoint. Both reuse the source/DJ creds — no separate
        admin password. -->
   <div class="mt-3 border-t border-gray-600 pt-3">
-    <span class="joko-label mb-1 block">Stream title</span>
+    <div class="mb-1 flex items-center justify-between">
+      <span class="joko-label">Stream title</span>
+      <button
+        class="text-[10px] font-semibold uppercase tracking-wider text-lime-400 transition-colors hover:text-lime-300"
+        onclick={() => (showGallery = !showGallery)}
+        aria-expanded={showGallery}
+        aria-controls="title-gallery"
+        >Titles ({gallery.length}/{TITLE_GALLERY_MAX})</button
+      >
+    </div>
     <div class="flex gap-2">
       <input
         class="min-w-0 flex-1 rounded-lg border border-gray-600 bg-gray-900 px-2 py-1.5 text-xs text-gray-100 transition-colors placeholder:text-gray-400 focus:border-lime-500"
-        placeholder={$streamTitle || 'song / show name'}
-        bind:value={titleDraft}
+        placeholder="song / show name"
+        bind:value={$streamTitle}
+        oninput={() => (titleOwned.set(!!$streamTitle.trim()))}
         onkeydown={(e) => e.key === 'Enter' && sendTitle()}
       />
+      <button
+        class="rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs text-gray-300 shadow-md transition-colors hover:bg-gray-700 hover:text-white disabled:opacity-40"
+        onclick={pinTitle}
+        disabled={!$streamTitle.trim()}
+        title="Save to gallery"
+        aria-label="Save title to gallery">📌</button
+      >
       <button
         class="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white shadow-md transition-colors hover:bg-gray-700 disabled:opacity-40"
         onclick={sendTitle}
@@ -231,6 +294,33 @@
       <div class="mt-1 text-[10px] text-lime-400">✓ Title sent to server</div>
     {:else if metaStatus === 'err'}
       <div class="mt-1 text-[10px] text-red-400">✕ Update failed</div>
+    {/if}
+
+    {#if showGallery}
+      <div id="title-gallery" class="mt-2 space-y-1">
+        {#each gallery as t (t)}
+          <div class="flex items-center gap-2 rounded-lg border border-gray-600 bg-gray-900 px-2 py-1">
+            <button
+              class="min-w-0 flex-1 truncate text-left text-xs text-gray-100 transition-colors hover:text-lime-300"
+              class:font-semibold={$streamTitle === t}
+              class:text-lime-400={$streamTitle === t}
+              onclick={() => useTitle(t)}
+              title="{t} — click to use"
+              >{t}</button
+            >
+            <button
+              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-gray-500 transition-colors hover:bg-red-900/40 hover:text-red-400"
+              onclick={() => removeTitle(t)}
+              aria-label="Remove {t}"
+              >✕</button
+            >
+          </div>
+        {:else}
+          <div class="rounded-lg border border-dashed border-gray-500 px-3 py-2 text-[11px] text-gray-400">
+            No saved titles yet. Type a title and press 📌.
+          </div>
+        {/each}
+      </div>
     {/if}
   </div>
 </div>

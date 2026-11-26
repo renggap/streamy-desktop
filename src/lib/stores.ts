@@ -17,7 +17,28 @@ export const recDir = writable<string | null>(null);
 export const volume = writable<number>(100);
 /** Monitor-only volume for local file playback, percent (0..=200, default 100). */
 export const monitorFileVolume = writable<number>(100);
-export const streamTitle = writable<string>('');
+/**
+ * Current stream/song title. Single source of truth, persisted to
+ * localStorage so it survives view switches (the bar unmounts) and restarts.
+ */
+function persisted(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+export const streamTitle = writable<string>(persisted('streamy.title', ''));
+streamTitle.subscribe((v) => {
+  try {
+    localStorage.setItem('streamy.title', v);
+  } catch {
+    /* best-effort persistence only */
+  }
+});
+/** True once the DJ typed/sent a title themselves; a track change must not
+ *  silently replace it. Reset when they clear the field. */
+export const titleOwned = writable<boolean>(false);
 export const sourceMode = writable<SourceMode>('file');
 
 // WebView2 runtime repair (in-app interstitial).

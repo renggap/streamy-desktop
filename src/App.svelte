@@ -29,6 +29,7 @@
     streamStats,
     micDenoise,
     notifySticky,
+    titleOwned,
   } from './lib/stores';
   import {
     next,
@@ -113,8 +114,13 @@
       playing.set(true);
       const idx = get(playlist).findIndex((t) => t.path === e.payload.path);
       currentIndex.set(idx >= 0 ? idx : null);
-      streamTitle.set(e.payload.title);
-      setStreamTitle(e.payload.title);
+      // A track change pushes its own title to the server only while the DJ
+      // hasn't typed one. Once they own the title, it stays until they clear it
+      // (that was the "title gone after Update" bug).
+      if (!get(titleOwned)) {
+        streamTitle.set(e.payload.title);
+        setStreamTitle(e.payload.title);
+      }
     });
     const ended = listen('track_ended', () => {
       playing.set(false);
